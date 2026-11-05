@@ -31,8 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [No turn-off timeout](https://github.com/jharris4/molight/blob/main/REFERENCE.md#no-turn-off-timeout)).
 - **Match the schedule after a restart**: a follow-mode light found off inside
   its schedule window, or on outside it, can be turned on or off at a restart.
-- **Occupancy turn-on by the light's own system**: a light its own system
-  turns on from occupancy, such as a Lutron Caséta occupancy group, keeps that
+- **Occupancy turn-on by the light's own system**: a light that its own
+  system turns on from occupancy, such as a Lutron Caséta occupancy group, keeps that
   faster turn-on while MoLight runs the turn-off and the rest.
 
 ### Deprecated
@@ -45,7 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Tuya scene switches**: their click and double click now bind; the long
   press no longer fires the single-click action.
-- **Commands a real light rejects**: a member whose integration raises no
+- **Commands that a real light rejects**: a member whose integration raises no
   longer leaves the virtual light on over a dark room, or off over a lit one.
 
 ## [1.9.0] - 2026-10-06
@@ -81,7 +81,7 @@ Virtual Remote buttons.
 ### Changed
 
 - **A light belongs to one virtual light.** The light forms and Discover
-  lights reject a light another virtual light already controls, on its own or
+  lights reject a light that another virtual light already controls, on its own or
   through a light group. Two virtual lights commanding one light fight over
   it; add the virtual light that has it instead.
 - Keep-on entities can no longer be the light itself, a light or group that
@@ -254,7 +254,7 @@ longer needs a custom repository.
 ### Changed
 
 - Light schedule pickers offer only MoLight schedule sensors.
-- The forms reject settings none of the chosen lights could apply (colors,
+- The forms reject settings that none of the chosen lights could apply (colors,
   transitions, brightness), an unreachable illuminance hysteresis, and settings
   on a disabled effect or warn stage.
 - A Virtual Illuminance Sensor starts `unavailable` rather than asserting

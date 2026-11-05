@@ -68,7 +68,7 @@ def async_raise_issue(
 
 @callback
 def async_check_shared_members(hass: HomeAssistant) -> None:
-    """Raise one issue per light two virtual lights command, and clear the rest.
+    """Raise one issue per light that two virtual lights command, and clear the rest.
 
     A light belongs to the first virtual light by name that commands it
     (see light_owners); every other one commanding it gets the issue,

@@ -169,7 +169,6 @@ from .helpers import (
     light_descendants as _light_descendants,
     light_member_ids as _light_member_ids,
     light_owners as _light_owners,
-    light_timeout as _light_timeout,
     lights_commanded as _lights_commanded,
     lights_lit_with as _lights_lit_with,
     lights_support_brightness,
@@ -179,6 +178,7 @@ from .helpers import (
     match_option,
     sensors_depend_on as _sensors_depend_on,
     shared_lights as _shared_lights,
+    turn_off_timeout as _turn_off_timeout,
     virtual_light_entries as _virtual_light_entries,
 )
 from .remote import (
@@ -212,7 +212,7 @@ _AUTO_ON_BRIGHTNESS_SELECTOR = selector.NumberSelector(
 )
 
 # Off warning sequence stage durations (0 disables a stage).
-_STAGE_TIMEOUT_SELECTOR = selector.NumberSelector(
+_STAGE_DURATION_SELECTOR = selector.NumberSelector(
     selector.NumberSelectorConfig(
         min=0, max=3600, step=1, unit_of_measurement="s", mode="box"
     )
@@ -738,7 +738,7 @@ def _virtual_entity_type(hass: HomeAssistant, entity_id: str | None) -> str | No
     return _entry_settings(entry).get(CONF_ENTITY_TYPE)
 
 
-def _schedule_entity_selector(
+def _schedule_sensor_selector(
     hass: HomeAssistant,
     *,
     legacy_entity: str | None = None,
@@ -772,7 +772,7 @@ def _schedule_entity_selector(
     )
 
 
-def _schedule_entity_is_allowed(
+def _schedule_sensor_is_allowed(
     hass: HomeAssistant,
     entity_id: str | None,
     *,
@@ -809,7 +809,7 @@ def _entry_entity_ids(
 def _combined_schedule_fields(hass: HomeAssistant, exclude: list[str]) -> dict:
     """Return the inputs, operator and invert fields of a combined schedule form."""
     return {
-        vol.Required(CONF_SCHEDULE_INPUTS): _schedule_entity_selector(
+        vol.Required(CONF_SCHEDULE_INPUTS): _schedule_sensor_selector(
             hass, multiple=True, exclude=exclude
         ),
         vol.Required(
@@ -829,7 +829,7 @@ def _validate_combined_schedule_inputs(
     """Require at least one input, each a MoLight schedule."""
     if not inputs:
         return {CONF_SCHEDULE_INPUTS: "schedule_inputs_required"}
-    if not all(_schedule_entity_is_allowed(hass, e) for e in inputs):
+    if not all(_schedule_sensor_is_allowed(hass, e) for e in inputs):
         return {CONF_SCHEDULE_INPUTS: "schedule_entity_not_schedule"}
     return {}
 
@@ -919,10 +919,10 @@ def _combined_cycle_candidates(
     return sorted(excluded)
 
 
-def _min_referencing_light_timeout(
+def _min_referencing_turn_off_timeout(
     hass: HomeAssistant, occupancy_entry_id: str
 ) -> int | None:
-    """Smallest light_timeout among virtual lights referencing an occupancy entry.
+    """Smallest turn-off timeout among virtual lights referencing an occupancy entry.
 
     Such a light references the entry's entity directly, or a combined
     sensor that includes it.
@@ -976,22 +976,22 @@ def _min_referencing_light_timeout(
                 settings.get(CONF_OCCUPANCY_ENTITY) in sensor_ids
                 or settings.get(CONF_MAINTAIN_OCCUPANCY_ENTITY) in sensor_ids
             )
-            and (timeout := _light_timeout(settings)) is not None
+            and (timeout := _turn_off_timeout(settings)) is not None
         )
     return min(timeouts, default=None)
 
 
-def _validate_light_timeout(
+def _validate_turn_off_timeout(
     hass: HomeAssistant, user_input: dict[str, Any]
 ) -> dict[str, str]:
-    """Check light_timeout >= any occupancy sensor's timeout.
+    """Check the turn-off timeout covers every occupancy sensor's occupancy timeout.
 
     The maintain occupancy sensor's latest_occupied_time feeds the turn-off timer the
     same way the occupancy sensor's does, so both are checked. A blank
     timeout runs no timer, so it passes that check but allows no effect or
     warn stage: they only ever warn of a timer off.
     """
-    timeout = _light_timeout(user_input)
+    timeout = _turn_off_timeout(user_input)
     if timeout is None:
         if int(user_input.get(CONF_EFFECT_TIMEOUT) or 0) or int(
             user_input.get(CONF_WARN_TIMEOUT) or 0
@@ -1037,7 +1037,7 @@ def _stale_light_settings(
         members = data.get(CONF_LIGHTS, [])
 
     def _errors(settings: dict[str, Any]) -> dict[str, str]:
-        return _validate_light_timeout(hass, settings) or _validate_keep_on_entities(
+        return _validate_turn_off_timeout(hass, settings) or _validate_keep_on_entities(
             hass, settings, own_entities, members
         )
 
@@ -1114,7 +1114,7 @@ def _validate_turn_on_selection(
 def _current_entity_ids(
     hass: HomeAssistant, submitted: dict[str, Any]
 ) -> dict[str, Any]:
-    """Return a submission with each entity ID changed since the form opened replaced.
+    """Replace, in a submission, every entity ID that changed since the form opened.
 
     Checks that compare entities, or read them, must see them as they are now.
     """
@@ -1294,7 +1294,7 @@ def _validate_transition_support(
 def _validate_brightness_support(
     hass: HomeAssistant, user_input: dict[str, Any], lights: Sequence[str]
 ) -> dict[str, str]:
-    """Reject a configured brightness none of the chosen lights could apply.
+    """Reject a configured brightness that none of the chosen lights could apply.
 
     An effect brightness of 0 is exempt: a blink fully off is sent as turn_off,
     which every light can do; it is the one visible warning that
@@ -1317,7 +1317,7 @@ def _validate_brightness_support(
 def _validate_color_support(
     hass: HomeAssistant, user_input: dict[str, Any], lights: Sequence[str]
 ) -> dict[str, str]:
-    """Reject a configured color none of the chosen lights could show.
+    """Reject a configured color that none of the chosen lights could show.
 
     Color temperature and RGB are separate capabilities (a tunable-white bulb
     has one and not the other), so they are judged separately. Same rule as the
@@ -1353,7 +1353,7 @@ def _validate_light_settings(
     hass: HomeAssistant, settings: dict[str, Any], lights: Sequence[str]
 ) -> dict[str, str]:
     """Validate one flat Virtual Light settings mapping."""
-    errors = _validate_light_timeout(hass, settings)
+    errors = _validate_turn_off_timeout(hass, settings)
     errors.update(_validate_stage_transitions(settings))
     errors.update(_validate_colors(settings))
     errors.update(_validate_transition_support(hass, settings, lights))
@@ -1517,7 +1517,7 @@ def _light_setting_fields(
     if with_schedule:
         sensor_fields.update(
             {
-                vol.Optional(CONF_SCHEDULE_ENTITY): _schedule_entity_selector(
+                vol.Optional(CONF_SCHEDULE_ENTITY): _schedule_sensor_selector(
                     hass, legacy_entity=legacy_schedule
                 ),
                 vol.Required(
@@ -1602,7 +1602,7 @@ def _light_setting_fields(
                 {
                     vol.Required(
                         CONF_EFFECT_TIMEOUT, default=DEFAULT_EFFECT_TIMEOUT
-                    ): _STAGE_TIMEOUT_SELECTOR,
+                    ): _STAGE_DURATION_SELECTOR,
                     vol.Required(
                         CONF_EFFECT_BRIGHTNESS, default=DEFAULT_EFFECT_BRIGHTNESS
                     ): _EFFECT_BRIGHTNESS_SELECTOR,
@@ -1612,7 +1612,7 @@ def _light_setting_fields(
                     vol.Optional(CONF_EFFECT_TRANSITION): _TRANSITION_SELECTOR,
                     vol.Required(
                         CONF_WARN_TIMEOUT, default=DEFAULT_WARN_TIMEOUT
-                    ): _STAGE_TIMEOUT_SELECTOR,
+                    ): _STAGE_DURATION_SELECTOR,
                     vol.Optional(CONF_WARN_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
                     vol.Optional(CONF_WARN_COLOR_MODE): _COLOR_MODE_SELECTOR,
                     vol.Optional(CONF_WARN_COLOR_TEMP): _COLOR_TEMP_SELECTOR,
@@ -1906,7 +1906,7 @@ def _light_member_cycle_candidates(
 def _shared_light_candidates(
     hass: HomeAssistant, edited_entry: config_entries.ConfigEntry | None = None
 ) -> list[str]:
-    """Light entity IDs that would add a light another virtual light commands."""
+    """Light entity IDs that would add a light that another virtual light commands."""
     own = edited_entry.entry_id if edited_entry is not None else None
     owners = _light_owners(hass, own_entry_id=own)
     return sorted(
@@ -1974,7 +1974,7 @@ def _disjoint_picks(hass: HomeAssistant, candidates: Sequence[str]) -> list[str]
 def _member_picker_exclusions(
     hass: HomeAssistant, edited_entry: config_entries.ConfigEntry | None = None
 ) -> list[str]:
-    """Lights a member picker hides: shared lights and groups with virtual lights."""
+    """Lights that a member picker hides: shared ones and groups with virtual lights."""
     return sorted(
         {
             *_shared_light_candidates(hass, edited_entry),
@@ -2010,7 +2010,7 @@ def _entity_label(hass: HomeAssistant, entity_id: str) -> str:
 def _show_wrapped_lights(
     flow: config_entries.ConfigFlow | config_entries.OptionsFlow, lights: list[str]
 ) -> config_entries.FlowResult:
-    """Show the page that names the virtual lights a light is about to wrap."""
+    """Show the page that names the virtual lights that a light is about to wrap."""
     return flow.async_show_form(
         step_id="confirm_wrapped_lights",
         data_schema=vol.Schema({}),
@@ -2036,7 +2036,7 @@ def _picker_exclusions(
 ) -> list[str]:
     """Exclusions for a picker, less the values already stored.
 
-    An excluded value the selector still receives fails schema validation
+    An excluded value that the selector still receives fails schema validation
     before the submit check can name the problem, so a stored one stays
     selectable and the check reports it in a friendly error.
     """
@@ -2879,7 +2879,7 @@ class MoLightConfigFlow(
                 if composed != base:
                     data[CONF_ENTITY_ID] = composed
             # The defaults form supplies every editable setting; the source
-            # entity, name and entity_id it never touches stay as the builder
+            # entity, name and entity_id that it never touches stay as the builder
             # set them.
             data.update(overrides)
             flows.append(
@@ -3023,14 +3023,14 @@ class MoLightConfigFlow(
     ) -> config_entries.FlowResult:
         """Adjust the defaults applied to every discovered light.
 
-        The same light_timeout and stage-transition checks the light create form
+        The same turn-off timeout and stage-transition checks that the light create form
         enforces apply here, since one setting set is shared by every pick.
         """
         errors: dict[str, str] = {}
         placeholders: dict[str, str] = {}
         if user_input is not None:
             flat = _current_entity_ids(self.hass, _flatten_light(user_input))
-            errors = _validate_light_timeout(self.hass, flat)
+            errors = _validate_turn_off_timeout(self.hass, flat)
             errors.update(_validate_match_schedule_after_restart(flat))
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
@@ -3059,7 +3059,7 @@ class MoLightConfigFlow(
                     )
                     placeholders["entity_id"] = entity_id
                     break
-            if not _schedule_entity_is_allowed(
+            if not _schedule_sensor_is_allowed(
                 self.hass, flat.get(CONF_SCHEDULE_ENTITY)
             ):
                 errors["base"] = "schedule_entity_not_schedule"
@@ -3355,7 +3355,7 @@ class MoLightConfigFlow(
                 ),
                 "mode_key": None,
                 "mode": None,
-                # Occupancy feeds the turn-off timer, so the light_timeout check
+                # Occupancy feeds the turn-off timer, so the turn-off timeout check
                 # applies to each light the same way the light form enforces it.
                 "check_timeout": True,
             }
@@ -3414,7 +3414,7 @@ class MoLightConfigFlow(
         """Pick a schedule sensor and its mode, then choose the lights to assign."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            if not _schedule_entity_is_allowed(
+            if not _schedule_sensor_is_allowed(
                 self.hass, user_input.get(CONF_ASSIGN_SENSOR)
             ):
                 errors[CONF_ASSIGN_SENSOR] = "schedule_entity_not_schedule"
@@ -3430,7 +3430,7 @@ class MoLightConfigFlow(
 
         schema = vol.Schema(
             {
-                vol.Required(CONF_ASSIGN_SENSOR): _schedule_entity_selector(self.hass),
+                vol.Required(CONF_ASSIGN_SENSOR): _schedule_sensor_selector(self.hass),
                 vol.Required(
                     CONF_SCHEDULE_MODE, default=DEFAULT_SCHEDULE_MODE
                 ): selector.SelectSelector(
@@ -3508,11 +3508,11 @@ class MoLightConfigFlow(
                     if entry is None:
                         continue  # a stale pick no longer backed by a light entry
                     cfg = _entry_settings(entry)
-                    light_timeout = _light_timeout(cfg)
+                    turn_off_timeout = _turn_off_timeout(cfg)
                     if (
                         occ_timeout is not None
-                        and light_timeout is not None
-                        and light_timeout < occ_timeout
+                        and turn_off_timeout is not None
+                        and turn_off_timeout < occ_timeout
                     ):
                         skipped.append(eid)
                         continue
@@ -3977,7 +3977,7 @@ class MoLightConfigFlow(
     ) -> config_entries.FlowResult:
         """Configure a regular Virtual Light.
 
-        Constraint: light_timeout >= occupancy_timeout of any referenced
+        Constraint: turn-off timeout >= occupancy timeout of any referenced
         occupancy sensor (enforced here and in the options flow).
         """
         errors: dict[str, str] = {}
@@ -3987,7 +3987,7 @@ class MoLightConfigFlow(
             if not flat.get(CONF_LIGHTS):
                 errors[CONF_LIGHTS] = "lights_required"
             else:
-                errors = _validate_light_timeout(self.hass, flat)
+                errors = _validate_turn_off_timeout(self.hass, flat)
                 errors.update(_validate_match_schedule_after_restart(flat))
             errors.update(_validate_name(flat))
             errors.update(
@@ -4009,7 +4009,7 @@ class MoLightConfigFlow(
             errors.update(
                 _validate_brightness_support(self.hass, flat, flat.get(CONF_LIGHTS, []))
             )
-            if not _schedule_entity_is_allowed(
+            if not _schedule_sensor_is_allowed(
                 self.hass, flat.get(CONF_SCHEDULE_ENTITY)
             ):
                 errors["base"] = "schedule_entity_not_schedule"
@@ -4140,7 +4140,7 @@ class MoLightConfigFlow(
             errors = _validate_name(flat)
             if not flat.get(CONF_LIGHTS):
                 errors[CONF_LIGHTS] = "lights_required"
-            if not _schedule_entity_is_allowed(
+            if not _schedule_sensor_is_allowed(
                 self.hass, flat.get(CONF_SCHEDULE_ENTITY)
             ):
                 errors[CONF_SCHEDULE_ENTITY] = "schedule_entity_not_schedule"
@@ -4167,7 +4167,7 @@ class MoLightConfigFlow(
                         multiple=True,
                     )
                 ),
-                vol.Required(CONF_SCHEDULE_ENTITY): _schedule_entity_selector(
+                vol.Required(CONF_SCHEDULE_ENTITY): _schedule_sensor_selector(
                     self.hass
                 ),
                 vol.Required(
@@ -4414,7 +4414,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             if not errors:
                 # A raised occupancy timeout must not outgrow any virtual light
                 # that references this sensor (directly or through a combined sensor).
-                min_light = _min_referencing_light_timeout(
+                min_light = _min_referencing_turn_off_timeout(
                     self.hass, self._entry.entry_id
                 )
                 if (
@@ -4483,7 +4483,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                         for e in constituents
                         if (t := _effective_occupancy_timeout(self.hass, e)) is not None
                     ]
-                    min_light = _min_referencing_light_timeout(
+                    min_light = _min_referencing_turn_off_timeout(
                         self.hass, self._entry.entry_id
                     )
                     if timeouts and min_light is not None and max(timeouts) > min_light:
@@ -4747,7 +4747,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             if not flat.get(CONF_LIGHTS):
                 errors[CONF_LIGHTS] = "lights_required"
             else:
-                errors = _validate_light_timeout(self.hass, flat)
+                errors = _validate_turn_off_timeout(self.hass, flat)
                 errors.update(_validate_match_schedule_after_restart(flat))
                 if _light_members_create_cycle(
                     self.hass, self._entry, flat[CONF_LIGHTS]
@@ -4779,7 +4779,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             errors.update(
                 _validate_brightness_support(self.hass, flat, flat.get(CONF_LIGHTS, []))
             )
-            if not _schedule_entity_is_allowed(
+            if not _schedule_sensor_is_allowed(
                 self.hass,
                 flat.get(CONF_SCHEDULE_ENTITY),
                 legacy_entity=self._cfg.get(CONF_SCHEDULE_ENTITY),
@@ -4905,7 +4905,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 errors[CONF_LIGHTS] = "light_shared"
             elif _groups_with_virtual_lights(self.hass, user_input[CONF_LIGHTS]):
                 errors[CONF_LIGHTS] = "light_group_virtual"
-            if not _schedule_entity_is_allowed(
+            if not _schedule_sensor_is_allowed(
                 self.hass,
                 user_input.get(CONF_SCHEDULE_ENTITY),
                 legacy_entity=self._cfg.get(CONF_SCHEDULE_ENTITY),
@@ -4940,7 +4940,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 ),
                 vol.Required(
                     CONF_SCHEDULE_ENTITY, default=cfg.get(CONF_SCHEDULE_ENTITY)
-                ): _schedule_entity_selector(
+                ): _schedule_sensor_selector(
                     self.hass, legacy_entity=cfg.get(CONF_SCHEDULE_ENTITY)
                 ),
                 vol.Required(

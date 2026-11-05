@@ -1293,7 +1293,7 @@ async def test_occupancy_after_an_overtaken_virtual_on_still_lights_the_room(
     hass: HomeAssistant,
 ) -> None:
     """An automatic turn-on only defers to a virtual one that still stands:
-    one turned off again while it waited no longer lights the room."""
+    one that was turned off again while it waited no longer lights the room."""
     select = _SlowSelect(hass)
     hass.states.async_set("binary_sensor.occ", "off")
     hass.states.async_set("light.ambient", "off")
@@ -1846,7 +1846,7 @@ async def test_script_stopped_during_the_wait_leaves_a_newer_turn_on(
 async def test_script_stopped_during_the_wait_leaves_occupancy_its_lights(
     hass: HomeAssistant,
 ) -> None:
-    """The script's turn-on replaced one occupancy had waiting. Stopped, it
+    """The script's turn-on replaced one that occupancy had waiting. Stopped, it
     sends nothing, and the room someone is in is lit at the auto-on brightness."""
     select = await _park_automatic_turn_on(hass, auto_on_brightness=40)
     calls = _light_calls(hass)
@@ -3406,8 +3406,8 @@ async def test_physical_change_during_a_replaced_select_call_is_not_sent_again(
 async def test_stage_after_a_physical_change_during_a_select_call_is_sent_again(
     hass: HomeAssistant, freezer
 ) -> None:
-    """What the physical change set stands, but a stage the timer reaches afterwards,
-    still during the call, is the light's own command again."""
+    """What the physical change has set stands, but a stage that the timer reaches
+    afterwards, still during the call, is the light's own command again."""
     light, other, select = await _lit_pair(
         hass, timeout=5, warn_timeout=8, warn_brightness=20
     )

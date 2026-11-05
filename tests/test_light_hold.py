@@ -523,7 +523,7 @@ async def test_hold_blocks_follow_window_end_release_applies_it(
 
 
 async def _hold_through_window_end(hass: HomeAssistant) -> None:
-    """Light lit by a follow window whose schedule end off the Auto-off switch left
+    """Light lit by a follow window whose schedule end off that the Auto-off switch left
     pending."""
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(KEEP_ON, "off")
@@ -785,7 +785,7 @@ async def test_release_outside_a_gate_window_runs_a_fresh_timer(
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("hold", ["switch", "keep_on"])
 async def test_release_applies_a_held_gate_end(hass: HomeAssistant, hold: str) -> None:
-    """A Gate and turn off end a hold kept from a light turned on manually is
+    """A Gate and turn off end that a hold kept from a light turned on manually is
     applied when the hold releases."""
     await _hold_through_gate_end(hass, hold)
     calls = record_service_calls(hass)
@@ -904,7 +904,7 @@ async def test_options_edit_to_another_gate_mode_drops_a_held_gate_end(
 async def test_gate_switch_end_into_bright_control_respects_a_hold(
     hass: HomeAssistant,
 ) -> None:
-    """A Gate and switch state end recalculating a held light while bright in
+    """A Gate and switch state end that recalculates a held light while bright in
     control mode keeps it on; releasing the hold applies the brightness."""
     hass.states.async_set(SCHED, "on")
     hass.states.async_set(ILLUM, "on")
@@ -1051,7 +1051,7 @@ async def test_reload_with_switch_on_runs_the_turn_off_timer(
 
 @pytest.mark.asyncio
 async def test_hold_engaged_as_timer_finishes(hass: HomeAssistant, freezer) -> None:
-    """A hold that lands in the same loop pass the timer finishes still wins.
+    """A hold that lands in the same loop pass in which the timer finishes still wins.
 
     The timer callback is a coroutine, so between its task being created and
     executed a hold state-change can slip in; _timer_finished re-checks the

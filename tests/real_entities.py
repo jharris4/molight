@@ -86,7 +86,7 @@ class InstantLight(RealLight):
     """A registered real light that replies inside the service call.
 
     With kelvin it also reports a color temperature, so every reply carries
-    something a command that named no color has to mirror.
+    something that a command that named no color has to mirror.
     """
 
     def __init__(self, object_id: str, *, kelvin: int | None = None, **kwargs: Any):
@@ -359,7 +359,7 @@ async def add_real(hass: HomeAssistant, *entities: Entity) -> None:
 
 
 class _RealFlow(ConfigFlow, domain="real"):
-    """The flow an integration's config entry needs to be set up."""
+    """The flow that an integration's config entry needs to be set up."""
 
 
 async def add_real_with_entry(
@@ -368,8 +368,8 @@ async def add_real_with_entry(
     """Add real entities from an entry of their own integration, "real".
 
     Each loading of the entry adds them afresh from make. Disabling it
-    disables them too, and leaves the placeholder state Home Assistant
-    writes for an entity whose entry is not loaded.
+    disables them too, and leaves the placeholder state that Home
+    Assistant writes for an entity whose entry is not loaded.
     """
     domains = list(dict.fromkeys(m().entity_id.split(".")[0] for m in make))
 

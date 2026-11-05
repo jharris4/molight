@@ -318,7 +318,7 @@ DATA_AUTO_OFF_ENABLED = "auto_off_enabled"
 # hass.data key of the flags of unloaded entries, by entry_id: a reloaded
 # light seeds before its switch has restored.
 DATA_AUTO_OFF_KEPT = DOMAIN + "_auto_off_kept"
-# hass.data key of the entity ID changes followed this run, former entity ID
+# hass.data key of the entity ID changes that were followed this run, former entity ID
 # to current one: a state saved under the former one describes the same entity.
 DATA_ENTITY_ID_CHANGED = DOMAIN + "_entity_id_changed"
 # hass.data key of the entity IDs of entities removed with their entry this
@@ -433,13 +433,13 @@ DEFAULT_MATCH_SCHEDULE_AFTER_RESTART = MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND
 # its running state/timer while switching to the outside settings.
 CONF_SCHEDULE_END_ACTION = "schedule_end_action"
 ATTR_SCHEDULE_END_OFF_PENDING = "schedule_end_off_pending"
-# The schedule sensor active_settings was last derived from; a missed
+# The schedule sensor that active_settings was last derived from; a missed
 # boundary is only caught up at startup when it is still the same schedule.
 ATTR_ACTIVE_SETTINGS_SCHEDULE = "active_settings_schedule"
 # That schedule's window marker while its inside settings are active, so a
 # restart can tell the window it left from a later one.
 ATTR_ACTIVE_SETTINGS_WINDOW = "active_settings_window_start"
-# The follow schedule a light's schedule_window_start was saved for; a marker
+# The follow schedule that a light's schedule_window_start was saved for; a marker
 # only belongs to the schedule that set it.
 ATTR_SCHEDULE_WINDOW_SCHEDULE = "schedule_window_schedule"
 SCHEDULE_END_ACTION_KEEP = "keep"
@@ -535,7 +535,8 @@ REMOTE_ACTION_PRESET_1 = "preset_1"
 REMOTE_ACTION_PRESET_2 = "preset_2"
 
 # (single-click key, double-click key, action) per bindable remote action:
-# the one table the config and options flows, the runtime, and the cleanup all iterate.
+# the one table that the config and options flows, the runtime, and the cleanup
+# all iterate.
 REMOTE_ACTION_FIELDS = (
     (CONF_ON_BUTTONS_SINGLE, CONF_ON_BUTTONS_DOUBLE, REMOTE_ACTION_ON),
     (CONF_OFF_BUTTONS_SINGLE, CONF_OFF_BUTTONS_DOUBLE, REMOTE_ACTION_OFF),

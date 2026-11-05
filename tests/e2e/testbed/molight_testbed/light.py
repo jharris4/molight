@@ -118,7 +118,7 @@ class TestbedLight(TestbedEntity, LightEntity):
         }
 
     async def async_added_to_hass(self) -> None:
-        """Start watching the sensor its own system turns it on from."""
+        """Start watching the sensor that its own system turns it on from."""
         await super().async_added_to_hass()
         self._watch_own_sensor()
 

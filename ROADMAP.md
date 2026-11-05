@@ -63,7 +63,7 @@ Ships alone.
 
 - **Problem.** Adaptive Lighting adjusts every light it controls every minute or two while it is
   on. MoLight reads each such brightness or color change as a physical dim and restarts the
-  timer, so a light both control never turns off. Adaptive Lighting is among the most installed
+  timer, so a light that both control never turns off. Adaptive Lighting is among the most installed
   HACS integrations, and it is the answer this file gives to time-of-day brightness.
 - **Design.** A per-light option, off by default: an adjustment to a light that is on does not
   restart the timer; a physical turn-on or off still counts. The docs say to leave the auto-on

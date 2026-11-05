@@ -396,7 +396,7 @@ async def test_standby_survives_a_crash_after_restart(
 async def test_missed_end_survives_a_stop_during_startup(
     hass: HomeAssistant, schedule_end_action: str
 ) -> None:
-    """HA stopped again before it finished starting still applies the end."""
+    """Stopped again before it finished starting, HA still applies the end."""
     real = _Members(hass, [REAL], {})
     left = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
     hass.states.async_set(OCC, "off", {"latest_occupied_time": left})
@@ -467,7 +467,7 @@ REAL2 = "light.real_2"
 KEEP_ON = "input_boolean.keep_on"
 RED = (0.0, 100.0)
 
-# How a member unreadable when the light seeds can look.
+# How a member that is unreadable when the light seeds can look.
 UNKNOWN = ["placeholder", "unavailable", "absent"]
 
 

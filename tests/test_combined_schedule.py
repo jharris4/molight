@@ -558,7 +558,8 @@ async def test_combination_set_up_before_its_input_picks_it_up(
 async def test_schedule_given_an_inputs_entity_id_becomes_that_input(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A schedule whose entity ID changes to one a combination names is its input."""
+    """A schedule whose entity ID changes to one that a combination names is its
+    input."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 07:00:00+00:00")
     await _setup(
@@ -1125,8 +1126,8 @@ async def test_unload_drops_an_input_change_still_waiting_to_be_counted(
 async def test_reference_cycle_is_unknown_instead_of_hanging(
     hass: HomeAssistant, freezer, caplog
 ) -> None:
-    """A reference cycle the config and options flows would reject (e.g. a hand edit) is
-    contained."""
+    """A reference cycle that the config and options flows would reject (e.g. a hand
+    edit) is contained."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 12:00:00+00:00")
     cycle_a = _combined("Cycle A", ["binary_sensor.cycle_b"])

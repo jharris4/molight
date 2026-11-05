@@ -192,7 +192,7 @@ LIGHT_ENTRY_KEYS = (
     "schedule_end_action",
     "entity_id",
 )
-# Inputs conversion to scheduled strips from the outside settings.
+# Inputs that conversion to scheduled strips from the outside settings.
 CONVERSION_INPUT_KEYS = (
     "occupancy_entity",
     "maintain_occupancy_entity",
@@ -866,7 +866,7 @@ def create_scheduled_light(client: HomeAssistantClient) -> str:
 
 
 def create_timeout_light(
-    client: HomeAssistantClient, light_timeout: int = 4, stage: int = 1
+    client: HomeAssistantClient, turn_off_timeout: int = 4, stage: int = 1
 ) -> str:
     """Create one short-lived light for a real timeout and off warning sequence."""
     return create_entry(
@@ -875,7 +875,7 @@ def create_timeout_light(
         {
             "name": "E2E Timer",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": light_timeout,
+            "light_timeout": turn_off_timeout,
             "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {
                 "false_detection_off_delay": 0,
@@ -1987,7 +1987,7 @@ def run_timeout_warning_scenario(
     client: HomeAssistantClient,
     timer_entry_id: str,
     bulb: str = "instant bulb",
-    light_timeout: int = 4,
+    turn_off_timeout: int = 4,
 ) -> None:
     """Run one real countdown/effect/warn/off sequence and cancel another."""
     client.call_service("light", "turn_off", {"entity_id": VIRTUAL_TIMER_LIGHT})
@@ -2045,7 +2045,7 @@ def run_timeout_warning_scenario(
             state["state"] == "on" and state["attributes"].get("brightness") == pct(60)
         ),
         "on at restored brightness past the cancelled warning finish time",
-        duration=light_timeout,
+        duration=turn_off_timeout,
     )
 
     set_timer_motion(client, False)
@@ -2083,7 +2083,7 @@ def create_physical_light(client: HomeAssistantClient) -> str:
 
 
 def run_physical_change_scenarios(client: HomeAssistantClient) -> None:
-    """Prove physical changes to the real light drive the state machine."""
+    """Prove that physical changes to the real light drive the state machine."""
     entry_id = create_physical_light(client)
     assert_entry_loaded(client, entry_id)
     client.wait_state(PHYSICAL_LIGHT, lambda state: state["state"] == "off", "off")
@@ -2760,7 +2760,7 @@ def has_color_command(data: dict[str, Any]) -> bool:
 
 
 def assert_multi_light_routing(client: HomeAssistantClient) -> None:
-    """Prove brightness, color, and transition reach only capable members."""
+    """Prove that brightness, color, and transition reach only capable members."""
     client.call_service(
         "light",
         "turn_on",
@@ -3301,7 +3301,7 @@ def prepare_removal_reference_cleanup(client: HomeAssistantClient) -> dict[str, 
 def verify_removal_reference_cleanup(
     client: HomeAssistantClient, snapshot: dict[str, str], restart_kind: str
 ) -> None:
-    """Prove a removed sensor and its reference stay gone after a restart."""
+    """Prove that a removed sensor and its reference stay gone after a restart."""
     entries = client.molight_entries()
     if any(entry["entry_id"] == snapshot["sensor_entry_id"] for entry in entries):
         raise AssertionError(
@@ -3680,7 +3680,7 @@ def run_primary() -> None:
     trigger_and_assert(client, pct(30), "Cozy", source="fixed")
     reset_trigger(client)
     client.set_available(SOURCE_SELECT, True)
-    # An option source value the select entity does not offer also falls back
+    # An option source value that the select entity does not offer also falls back
     # to the fixed/fallback option.
     client.set_state(SOURCE_SELECT, "Party")
     trigger_and_assert(client, pct(30), "Cozy", source="fixed")
@@ -5149,7 +5149,8 @@ def expect_still_loading(client: HomeAssistantClient, entity_id: str) -> None:
 
 
 def schedule_downtime(first_boundary: datetime, last_boundary: datetime) -> None:
-    """Record the schedule boundaries the host must hold Home Assistant down across."""
+    """Record the schedule boundaries that the host must hold Home Assistant down
+    across."""
     DOWNTIME_SNAPSHOT.write_text(
         json.dumps(
             {
@@ -5963,7 +5964,7 @@ def run_end_restart_verify() -> None:
         client,
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "off",
-        "off: a light the boundary turned off stays off",
+        "off: a light that the boundary turned off stays off",
         duration=2,
     )
     print("PASS: a turn_off boundary missed during the downtime was caught up once")
@@ -7046,7 +7047,7 @@ def run_hold_restart_verify() -> None:
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "off",
-        "off after the fresh timer an unheld restored light gets",
+        "off after the fresh timer that an unheld restored light gets",
         timeout=12,
     )
     wait_machine_state(client, "idle", HOLD_BOOT_LIGHT)
@@ -7936,12 +7937,12 @@ def run_faulty_member_scenarios(client: HomeAssistantClient) -> None:
         client,
         FAULTY_LIGHT,
         lambda state: state["state"] == "off",
-        "off: nothing turns on a light no member lit",
+        "off: nothing turns on a light that no member lit",
         duration=2,
     )
     for raw in (RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER, RAW_MULTI_RGB):
         client.set_behavior(raw, reject=False)
-    checkpoint("a turn-on every member rejected left the light off")
+    checkpoint("a turn-on that every member rejected left the light off")
 
     # A slow bulb whose full reply arrives after HA stops reusing our context
     # is still an echo: the timer is not restarted by it.
@@ -8128,7 +8129,8 @@ def run_combined_restart_prepare() -> None:
 
 
 def run_combined_restart_verify() -> None:
-    """Restored on with a maintain sensor still reading occupied seeds on."""
+    """Restored on with a maintain sensor still reading occupied, the combined sensor
+    seeds on."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -8918,16 +8920,16 @@ def run_timer_scenarios(client: HomeAssistantClient) -> None:
     run_timeout_warning_scenario(client, timer_entry_id)
     client.set_behavior(RAW_TIMER_LIGHT, latency=0.8, report_steps=True)
     # Stages must outlast the bulb's 1.1 s reporting delay to be observable.
-    timer_entry_id = create_timeout_light(client, light_timeout=10, stage=3)
+    timer_entry_id = create_timeout_light(client, turn_off_timeout=10, stage=3)
     assert_entry_loaded(client, timer_entry_id)
     run_timeout_warning_scenario(
-        client, timer_entry_id, "slow power-first bulb", light_timeout=10
+        client, timer_entry_id, "slow power-first bulb", turn_off_timeout=10
     )
     client.set_behavior(RAW_TIMER_LIGHT, latency=0, report_steps=False)
 
 
 def create_own_system_light(client: HomeAssistantClient) -> str:
-    """Create a light its own system turns on for occupancy, then MoLight."""
+    """Create a light that its own system turns on for occupancy, then MoLight."""
     return create_entry(
         client,
         "light",
@@ -9014,7 +9016,7 @@ def run_own_system_turn_on_scenarios(client: HomeAssistantClient) -> None:
     print("PASS: a light's own occupancy turn-on, and MoLight's when it has none")
 
 
-# Longer than the 5 s Home Assistant keeps a command's context on a light.
+# Longer than the 5 s that Home Assistant keeps a command's context on a light.
 LONG_FADE = 7
 # What a physical change leaves on a virtual light.
 PHYSICAL_TIMESTAMPS = (
@@ -9399,7 +9401,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
     checkpoint("a newer virtual turn-on during the select call was the only one sent")
 
     # The select and one real light share a device, like a WLED strip and its
-    # presets. The preset lighting that light is no physical change; the
+    # presets. The preset that lights that light is no physical change; the
     # other real light physically turned on still is, and wins.
     client.set_device([TARGET_SELECT, RAW_MULTI_DIMMER], "E2E Preset Strip")
     physical_before = client.state(PARK_LIGHT)["attributes"].get("last_on_physical")
@@ -9439,7 +9441,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
     )
     if member_commands(client, *members) != commands:
         raise AssertionError(
-            "A turn-on a physical change overtook was sent after its select"
+            "A turn-on that a physical change overtook was sent after its select"
         )
     wait_member(client, RAW_MULTI_RGB, 150)
     park_light_off(client, PARK_LIGHT, *members)
@@ -9553,7 +9555,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
 
     # A Virtual Scheduled Light switches settings while the preset of the settings it
     # left is still being applied: that select call keeps speaking for its
-    # device, so the preset lighting the light is still no physical change.
+    # device, so the preset that lights the light is still no physical change.
     schedule_entry_id = create_virtual_schedule(
         client, "E2E Park Schedule", "e2e_park_schedule", source=RAW_REMOVAL_MOTION
     )

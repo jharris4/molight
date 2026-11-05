@@ -513,7 +513,7 @@ async def test_failed_turn_on_that_lit_one_member_leaves_the_light_on(
 
 
 class _SlowAndBrokenMembers(_MemberLight):
-    """A call one member's integration rejects at once while another took it.
+    """A call that one member's integration rejects at once while another took it.
 
     Home Assistant raises for the whole call; the member that took the
     command reports its new state later, through answer().
@@ -549,7 +549,7 @@ class _SlowAndBrokenMembers(_MemberLight):
 async def test_slow_member_answering_after_another_raised_keeps_the_light_on(
     hass: HomeAssistant, freezer, caplog
 ) -> None:
-    """A member that took the turn-on another member's integration rejected
+    """A member that took the turn-on that another member's integration rejected
     reports on a moment later: that is its reply, not a physical turn-on,
     and the judgment of the failure waits for it."""
     hass.states.async_set(OCC, "off")
@@ -1955,7 +1955,7 @@ async def test_source_dropout_releases_light_via_virtual_occupancy(
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     # 61s later the virtual occupancy clears itself; the light starts the
-    # turn-off timer: light_timeout (300s) anchored to the dropout, so
+    # turn-off timer: the turn-off timeout (300s) anchored to the dropout, so
     # ~239s remain.
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
@@ -2322,7 +2322,7 @@ async def _start_with_unreadable_member(
 async def test_follow_unreadable_member_at_startup_keeps_manual_off(
     hass: HomeAssistant, boot: str
 ) -> None:
-    """An unreadable member at startup is not a member reboot: the manual off the
+    """An unreadable member at startup is not a member reboot: the manual off that the
     seed respected survives the member's first real state."""
     calls = _record_calls(hass)
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})

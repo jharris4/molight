@@ -300,7 +300,7 @@ async def _setup_gate_only_mode(hass: HomeAssistant, **kwargs) -> None:
 async def test_gate_only_mode_occupancy_rehold_while_bright(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Moving again while the timer runs holds the light the lamp makes bright."""
+    """Moving again while the timer runs holds the light that the lamp makes bright."""
     await _setup_gate_only_mode(hass, timeout=300)
     hass.states.async_set(
         OCC, "off", {"latest_occupied_time": dt_util.utcnow().isoformat()}
@@ -320,7 +320,7 @@ async def test_gate_only_mode_occupancy_rehold_while_bright(
 async def test_gate_only_mode_occupancy_cancels_a_warning_while_bright(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Occupancy cancels the warning of a light the lamp makes bright."""
+    """Occupancy cancels the warning of a light that the lamp makes bright."""
     await setup_entries(
         hass,
         make_light_entry(
@@ -459,7 +459,7 @@ SWITCH = "switch.matrix_light_auto_off"
 async def test_false_detection_does_not_shorten_a_fresh_timer(
     hass: HomeAssistant, freezer, fresh: str, blip: str, warned: bool
 ) -> None:
-    """A fresh timer, as a hold releasing or the door closing starts,
+    """A fresh timer, as one that a hold releasing or the door closing starts,
     outlives a false detection: the sensors' old latest_occupied_time is no
     reason to end it early, and its warning still starts on time."""
     old = (dt_util.utcnow() - timedelta(seconds=600)).isoformat()

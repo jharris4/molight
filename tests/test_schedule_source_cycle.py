@@ -52,7 +52,7 @@ BELOW = "binary_sensor.below"
 COMBINED = "binary_sensor.both"
 OCCUPANCY = "binary_sensor.seen"
 TOPOLOGIES = ["direct", "nested", "combined", "occupancy"]
-# The callbacks one settled source change may take; a loop passes it at once.
+# The callbacks that one settled source change may take; a loop passes it at once.
 CAP = 10
 
 
@@ -493,8 +493,8 @@ async def test_a_combined_schedule_rejects_a_schedule_whose_source_includes_it(
 async def test_creating_a_combined_schedule_rejects_a_group_that_names_its_id(
     hass: HomeAssistant, taken: bool
 ) -> None:
-    """A new combined schedule can take an entity ID its input's source group
-    names,
+    """A new combined schedule can take an entity ID that its input's source
+    group names,
     including the suffixed entity ID a taken name leads to."""
     groups, _real = await _groups(hass)
     await setup_entries(hass, _schedule(GROUP, invert=True))

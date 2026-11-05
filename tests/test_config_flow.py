@@ -1349,7 +1349,7 @@ async def test_scheduled_light_options_requires_replacing_deleted_schedule(
 async def test_scheduled_light_validates_each_settings_set_timeout(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Both settings forms enforce the occupancy sensor's timeout."""
+    """Both settings forms enforce the occupancy timeout."""
     await _setup_night_schedule(hass)
     await setup_entries(hass, occupancy_entry)
     result = await _start_create(hass)
@@ -2701,7 +2701,7 @@ async def test_light_options_leaves_color_modes_without_a_stored_color_blank(
     hass: HomeAssistant,
 ) -> None:
     """A pair with no stored color suggests no mode: a prefilled "none" would
-    silently discard a color set beside the untouched field."""
+    silently discard a color that is set beside the untouched field."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -3126,7 +3126,8 @@ async def test_light_options_error_keeps_submitted_values(
 async def test_light_flow_rejects_timeout_below_occupancy_timeout(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """light_timeout < the referenced sensor's occupancy_timeout is rejected."""
+    """A turn-off timeout below the referenced sensor's occupancy timeout is
+    rejected."""
     # Occupancy sensor with a 30s occupancy timeout (fixture) must be set up so its
     # entity exists in the registry.
     occupancy_entry.add_to_hass(hass)
@@ -3187,7 +3188,7 @@ async def test_light_flow_saves_a_blank_timeout(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
     """A cleared timeout is stored as a blank one, also with an occupancy sensor
-    whose occupancy timeout a set one would have to match."""
+    whose occupancy timeout a timeout that is set would have to match."""
     await setup_entries(hass, occupancy_entry)
     result = await _reach_light_form(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -3421,7 +3422,7 @@ async def test_scheduled_light_saves_a_blank_timeout_per_settings_set(
 
 
 @pytest.mark.asyncio
-async def test_occupancy_options_reject_timeout_above_light_timeout(
+async def test_occupancy_options_reject_timeout_above_turn_off_timeout(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
     """Raising an occupancy timeout past the timeout of a light that references it
@@ -4346,7 +4347,7 @@ async def test_discover_filter_no_matches_reshows(hass: HomeAssistant) -> None:
 async def test_discover_preselect_none_and_empty_selection(
     hass: HomeAssistant,
 ) -> None:
-    """Pre-select all matches off starts the checklist empty; submitting
+    """With Pre-select all matches off, the checklist starts empty; submitting
     nothing errors."""
     hass.states.async_set(
         "binary_sensor.hall_motion", "off", {"device_class": "motion"}
@@ -5216,7 +5217,7 @@ async def test_illuminance_forms_accept_small_threshold(
 
 
 @pytest.mark.asyncio
-async def test_combined_options_reject_constituent_above_light_timeout(
+async def test_combined_options_reject_constituent_above_turn_off_timeout(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
     """Adding a slow constituent that outgrows a light that references it is
@@ -6195,7 +6196,7 @@ async def test_light_flow_skips_timeout_check_for_non_occupancy_refs(
 
     Covers a reference to a MoLight entry of a non-occupancy type, one to a
     registered entity without a config entry, and one to another domain's
-    entity: none of them can supply a timeout, so a tiny light_timeout is
+    entity: none of them can supply a timeout, so a tiny turn-off timeout is
     accepted.
     """
     await setup_entries(hass, illuminance_entry)
@@ -6461,7 +6462,7 @@ async def test_explicit_entity_id_conflict_all_create_steps(
 async def test_assign_noop_leaves_entry_untouched(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Re-assigning a sensor a light already carries must not rewrite the entry
+    """Re-assigning a sensor that a light already carries must not rewrite the entry
     (a rewrite would needlessly reload it)."""
     light = _light_entry(
         "Hall", "hall", occupancy_entity="binary_sensor.test_occupancy"
@@ -7281,7 +7282,8 @@ async def test_discovery_flows_submitted_together_wrap_a_pick_once(
 async def test_discovery_skips_a_pick_wrapped_while_the_form_was_open(
     hass: HomeAssistant, kind: str
 ) -> None:
-    """A pick another flow wrapped meanwhile is skipped, and the summary says so."""
+    """A pick that another flow wrapped meanwhile is skipped, and the summary says
+    so."""
     domain, attrs, key, defaults = _DISCOVERY_KINDS[kind]
     picks = [f"{domain}.desk", f"{domain}.hall"]
     for entity_id in picks:
@@ -7427,7 +7429,7 @@ async def test_convert_to_scheduled_requires_a_schedule(
 
 
 @pytest.mark.asyncio
-async def test_options_light_rejects_real_schedule_entity(
+async def test_options_light_rejects_non_molight_schedule_sensor(
     hass: HomeAssistant,
 ) -> None:
     """A registered binary sensor from another integration is not a schedule."""
@@ -7769,7 +7771,7 @@ async def test_light_options_reject_cycle_from_stale_form(
 async def test_light_options_final_page_rejects_cycle_closed_meanwhile(
     hass: HomeAssistant, scheduled: bool
 ) -> None:
-    """A cycle another light's save closed behind a later page is rejected."""
+    """A cycle that another light's save closed behind a later page is rejected."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
     hall = (
@@ -7883,8 +7885,8 @@ async def test_scheduled_light_options_reject_member_cycle(
 async def test_create_picker_hides_lights_other_virtual_lights_control(
     hass: HomeAssistant, scheduled: bool
 ) -> None:
-    """A light belongs to one virtual light: the picker hides one another
-    controls, a group containing it, and a virtual light another wraps."""
+    """A light belongs to one virtual light: the picker hides one that another
+    controls, a group containing it, and a virtual light that another wraps."""
     await _setup_night_schedule(hass)
     hass.states.async_set("light.hall_real", "off")
     hass.states.async_set("light.free", "off")
@@ -7948,7 +7950,7 @@ async def test_light_pickers_scan_virtual_lights_once_per_render(
 async def test_create_rejects_a_light_wrapped_while_the_form_was_open(
     hass: HomeAssistant, scheduled: bool
 ) -> None:
-    """A light another virtual light took while the form was open is rejected."""
+    """A light that another virtual light took while the form was open is rejected."""
     await _setup_night_schedule(hass)
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -8044,7 +8046,7 @@ async def test_scheduled_light_options_reject_a_light_another_virtual_light_cont
 async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
     hass: HomeAssistant, scheduled: bool
 ) -> None:
-    """A light another light's save took behind a later page is rejected."""
+    """A light that another light's save took behind a later page is rejected."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
     hall = (
@@ -8119,7 +8121,7 @@ async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
 async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
     hass: HomeAssistant, last_page: str, taken: str
 ) -> None:
-    """A new light's last page rejects a light another light took behind it,
+    """A new light's last page rejects a light that another light took behind it,
     or a member group that came to name the entity ID the new light will get."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
@@ -8784,7 +8786,7 @@ async def test_discovery_skips_a_group_holding_a_virtual_light(
 async def test_discovery_skips_a_light_another_virtual_light_controls_through_a_group(
     hass: HomeAssistant,
 ) -> None:
-    """A bulb in a group a virtual light controls, and a group around a bulb a
+    """A bulb in a group that a virtual light controls, and a group around a bulb that a
     virtual light controls, both already belong to that virtual light."""
     hass.states.async_set("light.bulb", "off")
     hass.states.async_set("light.taken", "off", {"entity_id": ["light.bulb"]})
@@ -8940,7 +8942,7 @@ async def test_discovery_rechecks_picks_a_group_edit_made_overlap(
 async def test_light_discoveries_submitted_together_do_not_share_a_light(
     hass: HomeAssistant, first: str, second: str, created: int
 ) -> None:
-    """A light a picked group contains is reserved like the group itself."""
+    """A light that a picked group contains is reserved like the group itself."""
     _overlap_lights(hass)
     flows = []
     for pick in (first, second):
@@ -10144,7 +10146,7 @@ async def test_stage_rules_use_the_whole_seconds_the_light_runs(
 
 
 def _subject_cfg(hass: HomeAssistant) -> dict:
-    """The entry settings of the light the shared light forms edit or create."""
+    """The entry settings of the light that the shared light forms edit or create."""
     (entry,) = [
         e
         for e in hass.config_entries.async_entries(DOMAIN)
@@ -10715,7 +10717,7 @@ async def test_entity_id_already_exists_does_not_save_a_sensor_deleted_meanwhile
 async def test_an_id_taken_again_after_its_removal_is_accepted(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Only an entity ID no entity holds counts as removed."""
+    """Only an entity ID that no entity holds counts as removed."""
     await setup_entries(hass, occupancy_entry)
     hall = _light_entry("Hall", "hall")
     await setup_entries(hass, hall)
@@ -11205,7 +11207,7 @@ async def test_remote_preset_needs_a_brightness_of_at_least_one_percent(
 
 
 # ---------------------------------------------------------------------------
-# The light_timeout >= occupancy_timeout check, from the sensor's side
+# The turn-off timeout >= occupancy timeout check, from the sensor's side
 # ---------------------------------------------------------------------------
 
 
@@ -11309,7 +11311,7 @@ async def test_occupancy_options_check_lights_through_nested_combined_sensors(
 async def test_assign_occupancy_accepts_a_timeout_equal_to_the_sensors(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, role: str
 ) -> None:
-    """The check is light_timeout >= occupancy_timeout, so equal is enough."""
+    """The check is turn-off timeout >= occupancy timeout, so equal is enough."""
     equal = _light_entry("Closet", "closet", timeout=30)  # the sensor's 30 s
     await setup_entries(hass, occupancy_entry, equal)
 
@@ -11347,7 +11349,8 @@ async def test_assign_occupancy_accepts_a_timeout_equal_to_the_sensors(
 async def test_standby_color_needs_a_light_that_can_show_it(
     hass: HomeAssistant, flow: str, standby: dict, modes: list[str], error: str | None
 ) -> None:
-    """A standby color no chosen light can show is rejected, as other colors are."""
+    """A standby color that no chosen light can show is rejected, as other colors
+    are."""
     hass.states.async_set("light.porch_real", "off", {"supported_color_modes": modes})
     if flow == "create":
         manager = hass.config_entries.flow
@@ -11525,7 +11528,7 @@ async def test_discover_light_defaults_reject_match_schedule_without_follow(
 async def test_convert_to_scheduled_strips_the_match_choice(
     hass: HomeAssistant,
 ) -> None:
-    """The match choice every light form saves stays out of both settings sets."""
+    """The match choice that every light form saves stays out of both settings sets."""
     source = _light_entry(
         "Kitchen",
         "kitchen",

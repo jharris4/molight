@@ -952,7 +952,7 @@ async def test_illuminance_source_that_goes_missing_lights_an_occupied_room(
     hass: HomeAssistant, virtual_light_behavior_variant, how: str, mode: str
 ) -> None:
     """A bright sensor left with no reading is no longer bright, so the
-    occupied room it kept dark lights, as when the room goes dark."""
+    occupied room that it kept dark lights up, as when the room goes dark."""
     source, _, _ = await bright_occupied_room(hass, how, illuminance_mode=mode)
     calls = record_service_calls(hass)
     await remove_lux(hass, how, source)

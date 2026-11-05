@@ -88,7 +88,7 @@ class AutoOffSwitch(SwitchEntity, EntityIdFollowingRestoreEntity):
         """Release the hold when the switch is deleted: nothing else can."""
         self._attr_is_on = True
         self._send_to_light()
-        # The switch a reload adds back restores this, not the hold.
+        # The switch that a reload adds back restores this, not the hold.
         self.async_write_ha_state()
 
     async def async_turn_on(self, **kwargs: Any) -> None:

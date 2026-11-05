@@ -454,7 +454,7 @@ async def test_dark_edge_after_the_timeout_resumes_nothing(
 async def test_dark_edge_after_a_manual_off_while_bright_resumes_nothing(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A manual off of a light brightness already had off ends that on-period."""
+    """A manual off of a light that brightness already had off ends that on-period."""
     hass.states.async_set(ILLUM, "off")  # dark
     await setup_entries(hass, make_light_entry(illuminance=ILLUM))
 
@@ -541,9 +541,9 @@ async def test_gate_window_end_while_bright_off_ends_the_on_period(
 async def test_dark_edge_outside_a_gate_window_resumes_a_bright_off(
     hass: HomeAssistant, freezer, mode: str
 ) -> None:
-    """Outside a gate window going dark still resumes an on-period that
-    going bright cut short: the gate blocks presence lighting an off room, not
-    continuing an on-period that already exists."""
+    """Going dark outside a gate window still resumes an on-period that
+    going bright cut short: the gate blocks presence from lighting an off room, not
+    an on-period that already exists from continuing."""
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(SCHED, "off")  # outside the window
     hass.states.async_set(REAL, "off")
@@ -727,7 +727,7 @@ async def test_dark_edge_resumes_the_timer_a_raw_sensors_clear_started(
 async def test_dark_edge_resumes_a_timer_restarted_by_a_physical_change(
     hass: HomeAssistant, freezer, change: str
 ) -> None:
-    """A physical dim or recolor restarts the timer going dark resumes."""
+    """A physical dim or recolor restarts the timer that going dark resumes."""
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(REAL, "off")
     _real_light_reports(hass)
@@ -793,7 +793,8 @@ async def test_dark_edge_resumes_the_timer_a_hold_release_started(
 async def test_dark_edge_resumes_a_maintain_occupancy_sensors_timer(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The timer a maintain occupancy sensor's clear started is resumed like any."""
+    """The timer that a maintain occupancy sensor's clear started is resumed like
+    any."""
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(MAINT, "off")
     hass.states.async_set(REAL, "off")
@@ -1738,7 +1739,7 @@ async def test_virtual_turn_on_not_gated_outside_schedule(
 async def _assert_virtual_turn_on_runs_timer(
     hass: HomeAssistant, freezer, entry
 ) -> None:
-    """Assert a manually turned-on light runs its turn-off timer."""
+    """Assert that a manually turned-on light runs its turn-off timer."""
     await setup_entries(hass, entry)
 
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -1788,7 +1789,8 @@ async def test_reoccupancy_during_countdown_cancels_timer(
 async def test_finished_timer_defers_to_reoccupancy_in_same_iteration(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A timer finishing in the same loop iteration occupancy returns is a no-op.
+    """A timer finishing in the same loop iteration in which occupancy returns is a
+    no-op.
 
     async_call_later has already fired the callback at that point, so the
     occupancy handler's _cancel_timer can't stop it; _timer_finished itself
@@ -2032,7 +2034,7 @@ async def test_false_blip_after_a_genuine_visit_keeps_its_timer(
 async def test_false_blip_after_a_window_start_visit_keeps_its_timer(
     hass: HomeAssistant, freezer, hold: str
 ) -> None:
-    """The same for a light a gate window start lit for standing presence."""
+    """The same for a light that a gate window start lit for standing presence."""
     await _assert_false_blip_keeps_the_visits_timer(hass, freezer, "window", hold)
 
 
@@ -2371,7 +2373,7 @@ async def test_self_service_echo_does_not_upgrade_timer(
 async def test_timer_falls_back_when_lot_unparsable(
     hass: HomeAssistant, freezer
 ) -> None:
-    """An unparsable latest_occupied_time falls back to the full light_timeout."""
+    """An unparsable latest_occupied_time falls back to the full turn-off timeout."""
     await setup_entries(hass, make_light_entry(occupancy=OCC))
 
     hass.states.async_set(OCC, "on", {"latest_occupied_time": "garbage"})

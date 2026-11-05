@@ -329,7 +329,8 @@ async def set_home(
 
 
 def molight_issues(hass: HomeAssistant, entry_id: str) -> dict[str, dict[str, str]]:
-    """Return the Repairs issues an entry raised, by ID without the entry prefix."""
+    """Return the Repairs issues that an entry raised, by ID without the entry
+    prefix."""
     prefix = f"{entry_id}_"
     return {
         issue_id[len(prefix) :]: dict(issue.translation_placeholders or {})
@@ -426,7 +427,7 @@ class _ErrorRecords(logging.Handler):
 @pytest.fixture(autouse=True)
 def fail_on_error_log(request: pytest.FixtureRequest):
     """Fail a test that logged an error, since HA only logs listener crashes,
-    or a MoLight warning it did not expect, as the e2e log gate would."""
+    or that logged a MoLight warning it did not expect, as the e2e log gate would."""
     handler = _ErrorRecords()
     root = logging.getLogger()
     root.addHandler(handler)
@@ -443,7 +444,7 @@ def fail_on_error_log(request: pytest.FixtureRequest):
 
 
 # A Wednesday noon in US/Pacific (the test timezone), away from every schedule
-# boundary and clock change the tests use.
+# boundary and clock change that the tests use.
 TEST_NOW = "2026-01-14 12:00:00-08:00"
 
 
@@ -522,8 +523,8 @@ def occupancy_entry() -> MockConfigEntry:
             CONF_NAME: "Test Occupancy",
             CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
-            # Classification off, like the runtime fallback the fixture's
-            # missing key used to hit; tests exercising false detections set
+            # Classification off, like the runtime fallback that the
+            # fixture's missing key used to hit; tests exercising false detections set
             # their own grace explicitly.
             CONF_FALSE_DETECTION_GRACE: 0,
         },

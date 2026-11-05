@@ -273,7 +273,7 @@ async def test_occupancy_turns_light_on_when_dark(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_COUNTDOWN
 
-    # The timer anchors to latest_occupied_time: light_timeout (60s) minus the
+    # The timer anchors to latest_occupied_time: the turn-off timeout (60s) minus the
     # occupancy timeout (30s), i.e. 30s after the sensor cleared.
     freezer.tick(timedelta(seconds=31))
     async_fire_time_changed(hass)
@@ -1027,7 +1027,8 @@ async def test_illuminance_gate_only_mode_never_forces_off(
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 async def test_follow_mode_lifecycle(hass: HomeAssistant, freezer) -> None:
-    """Follow-mode light turns on at window start, ignores light_timeout, off at end."""
+    """Follow-mode light turns on at window start, ignores the turn-off timeout,
+    off at end."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 20:00:00+00:00")
     await _setup_entries(hass, _night_schedule_entry(), _follow_light_entry())
@@ -1045,7 +1046,7 @@ async def test_follow_mode_lifecycle(hass: HomeAssistant, freezer) -> None:
     assert state.attributes["molight_state"] == STATE_SCHEDULED
     assert state.attributes["schedule_window_start"] == "2026-07-02T21:00:00+00:00"
 
-    # Way past light_timeout (60s): no timer runs in SCHEDULED.
+    # Way past the turn-off timeout (60s): no timer runs in SCHEDULED.
     t = datetime(2026, 7, 2, 23, 0, 0, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)
@@ -1167,7 +1168,7 @@ async def test_follow_mode_unreadable_schedule_at_startup_then_new_window(
     hass: HomeAssistant, unreadable: str
 ) -> None:
     """A manual off only stands for its own window: a different window
-    arriving once the schedule reads lights the room."""
+    that arrives once the schedule reads lights the room."""
     marker = "2026-07-02T21:00:00+00:00"
     await _start_follow_light_with_schedule_unreadable(hass, "off", marker, unreadable)
 
@@ -1278,7 +1279,7 @@ async def test_follow_mode_manual_re_on_rejoins_window(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_SCHEDULED
 
-    # Well past light_timeout, still before window end: must stay on.
+    # Well past the turn-off timeout, still before window end: must stay on.
     t = datetime(2026, 7, 2, 23, 30, 0, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)

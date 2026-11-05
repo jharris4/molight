@@ -1402,10 +1402,10 @@ _CROSSING_CASES = [
     (LONDON, (_at("06:00"), _SUNRISE), "2026-06-22 12:00", "off"),
     (LONDON, (_at("06:00"), _SUNRISE), "2026-06-22 06:30", "off"),
     (LONDON, (_at("06:00"), _SUNRISE), "2026-12-15 07:00", "on"),
-    # A fixed start the winter sunset (15:52) comes before.
+    # A fixed start that the winter sunset (15:52) comes before.
     (LONDON, (_at("16:00"), _SUNSET), "2026-12-15 17:00", "off"),
     (LONDON, (_at("16:00"), _SUNSET), "2026-06-22 17:00", "on"),
-    # A fixed end the late winter sunrise (10:03) comes after.
+    # A fixed end that the late winter sunrise (10:03) comes after.
     (TROMSO, (_SUNRISE, _at("09:00")), "2026-01-25 12:00", "off"),
     (LONDON, (_SUNRISE, _at("09:00")), "2026-06-22 08:00", "on"),
     # Overnight windows stay overnight in summer.
@@ -2204,8 +2204,8 @@ async def test_follow_light_follows_a_window_a_time_zone_change_ends_or_starts(
 async def test_schedule_gated_light_follows_a_time_zone_change(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A gate that the corrected clock closes stops occupancy lighting the
-    room, and opens again at the window's start on the new clock."""
+    """A gate that the corrected clock closes stops occupancy from lighting
+    the room, and opens again at the window's start on the new clock."""
     occupancy = "binary_sensor.room_occupancy"
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 20:00:00+00:00")

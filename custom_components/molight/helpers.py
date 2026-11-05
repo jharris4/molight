@@ -69,7 +69,7 @@ def entry_settings(entry: ConfigEntry) -> dict:
     return cfg
 
 
-def light_timeout(settings: dict[str, Any]) -> int | None:
+def turn_off_timeout(settings: dict[str, Any]) -> int | None:
     """Return a settings mapping's turn-off timeout: None if blank, 300 s if absent."""
     timeout = settings.get(CONF_LIGHT_TIMEOUT, DEFAULT_LIGHT_TIMEOUT)
     return None if timeout is None else int(timeout)
@@ -126,7 +126,7 @@ def same_entity(hass: HomeAssistant, saved: str | None, current: str | None) -> 
 
 
 def match_option(value: str, options: Sequence[Any]) -> str | None:
-    """Return the offered select option a value names, or None.
+    """Return the offered select option that a value names, or None.
 
     An exact match wins, so an option's own padding is kept; padding typed
     around an option is ignored when that leaves a single option.
@@ -481,7 +481,7 @@ def light_descendants(
 def lights_commanded(
     hass: HomeAssistant, members: Sequence[str], lights: dict[str, ConfigEntry]
 ) -> set[str]:
-    """Return the lights a virtual light with these members commands itself.
+    """Return the lights that a virtual light with these members commands itself.
 
     A light group stands for itself and the lights it contains; a virtual
     light stands for itself alone, since it commands its own members.
@@ -519,7 +519,7 @@ def light_owners(
     """Return the virtual light entries and the owner of each of their member lights.
 
     An owner is named by its light's entity ID, or its entry's title while it
-    has no light entity; the first owner by name wins a member light two share.
+    has no light entity; the first owner by name wins a member light that two share.
     """
     lights = virtual_light_entries(hass, VIRTUAL_LIGHT_TYPES)
     names = {entry.entry_id: entity_id for entity_id, entry in lights.items()}
@@ -549,7 +549,7 @@ def shared_lights(
     own_entry_id: str | None = None,
     owners: tuple[dict[str, ConfigEntry], dict[str, str]] | None = None,
 ) -> dict[str, str]:
-    """Return lights among these members another virtual light commands.
+    """Return lights among these members that another virtual light commands.
 
     Maps each such light to its owner (see light_owners), which a caller
     checking many member lists computes once and passes in. Two virtual
@@ -587,7 +587,7 @@ def lights_lit_with(
     members: Sequence[str],
     candidates: Iterable[str],
 ) -> set[str]:
-    """Of the candidates, the lights and groups on whenever this light is lit.
+    """Of the candidates, the lights and groups that are on whenever this light is lit.
 
     That is one sharing a member with it, at any depth, or one that includes
     it; a generic group counts like a light group.

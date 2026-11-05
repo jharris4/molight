@@ -164,8 +164,8 @@ container's CPU to approximate that locally (the suites take about twice as
 long); `npm run test:e2e` also loads the machine by running all lanes at once.
 
 A successful run removes its temporary configuration. On failure the runner
-prints a retained run directory under the system temporary directory
-containing the isolated HA configuration and Compose logs. That directory
+prints a retained run directory, under the system temporary directory, that
+contains the isolated HA configuration and Compose logs. That directory
 contains the disposable test account, so remove it after debugging. The
 browser lane also keeps its failure artifacts (Playwright output, a copy of
 the HA configuration, and Compose logs) in `tests/e2e/artifacts/browser` in

@@ -630,7 +630,7 @@ class VirtualCombinedOccupancySensor(
         self._false_count: int = 0
         self._last_clear_false: bool = False
         # A restored "on" that no constituent confirmed at seed time: a
-        # maintain sensor reading occupied as the rest of startup unfolds
+        # maintain sensor that reads occupied as the rest of startup unfolds
         # may still carry it across (see _seed_state).
         self._restored_carry = False
         self._startup_done = True
@@ -708,8 +708,8 @@ class VirtualCombinedOccupancySensor(
                 )
         elif restored_on and self._any_on(self._maintain_sensors):
             # Intentional startup exception to "maintain sensors never start
-            # occupancy": the restored state is direct evidence occupancy was
-            # already triggered before the restart, so a maintain sensor
+            # occupancy": the restored state is direct evidence that occupancy
+            # was already triggered before the restart, so a maintain sensor
             # still reading occupied carries it across. (An on-duration
             # heuristic can't do this job: constituents rewrite their state
             # at startup, resetting last_changed, and it would wrongly start
@@ -748,8 +748,8 @@ class VirtualCombinedOccupancySensor(
 
         A visit they saw before this sensor existed, or while it was not
         loaded, is history to measure the next visit against, not a
-        detection made during it. Only a constituent a restored running
-        visit already had can have added to that visit meanwhile.
+        detection made during it. Only a constituent that a restored
+        running visit already had can have added to that visit meanwhile.
         """
         saved = self._saved_lots or {}
         for entity_id in dict.fromkeys(self._trigger_sensors + self._maintain_sensors):
@@ -832,7 +832,7 @@ class VirtualCombinedOccupancySensor(
 
     @callback
     def _handle_late_input(self, _event: Event[EventStateChangedData]) -> None:
-        # Judged once the sensor reading this input has had time to react.
+        # Judged once the sensor that reads this input has had time to react.
         if self._late_settle_unsub is None:
             self._late_settle_unsub = async_call_later(
                 self.hass, _LATE_SETTLE, self._settle_late_maintain
@@ -874,7 +874,7 @@ class VirtualCombinedOccupancySensor(
             )
             return
         new_state = event.data["new_state"]
-        # A maintain sensor reading occupied while startup is still under
+        # A maintain sensor that reads occupied while startup is still under
         # way, on its first sighting after that, or with a start it did not
         # witness because its own source loaded late (it reports
         # last_on_time: None) carries a restored "on" across (see
@@ -901,7 +901,7 @@ class VirtualCombinedOccupancySensor(
             and new_state.state != "on"
             and self._unread_inputs(entity_id)
         ):
-            # Its first report is an "off" its own source has yet to back.
+            # Its first report is an "off" that its own source has yet to back.
             self._late_maintain.add(entity_id)
         if was_late or entity_id in self._late_maintain:
             self._watch_late_inputs()
@@ -1808,8 +1808,8 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
     ) -> datetime | None:
         """Return the current marker if its schedule period has run on into this window.
 
-        Windows chained around the clock show each evaluation a later merged
-        start, and a moved marker would re-trigger Follow mode. The merged
+        Windows chained around the clock show a later merged start to each
+        evaluation, and a moved marker would re-trigger Follow mode. The merged
         windows are complete only from the first trusted day, so an older
         marker is kept unless the schedule went off since then.
         """
@@ -1880,7 +1880,7 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
 # ---------------------------------------------------------------------------
 
 _NEG_INF = float("-inf")
-# States each source keeps between refreshes; only the oldest are dropped.
+# The states that each source keeps between refreshes; only the oldest are dropped.
 _MAX_PASSED_THROUGH_STATES = 100
 # current_window_start for a schedule period with no known start: stable, so Follow
 # mode applies it only once.
@@ -1993,8 +1993,8 @@ class _SourceChanges:
 
     A refresh reads only each source's final state, so an off and on arriving
     together would leave no trace of the window that ended. passed_through
-    keeps the on and off states (start, end, value) a source passed through, in order,
-    when it changed more than once.
+    keeps the on and off states (start, end, value) that a source passed through,
+    in order, when it changed more than once.
     """
 
     changed: set[str] = field(default_factory=set)
@@ -2043,7 +2043,7 @@ class _ScheduleTree:
 
     Time-window schedules are read from their entry settings and binary sensor
     schedules from their state, so the result never depends on another
-    combined schedule's state or on the order entities start up.
+    combined schedule's state or on the order in which entities start up.
     """
 
     def __init__(self, hass: HomeAssistant) -> None:
@@ -2404,7 +2404,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, EntityIdFollowingRestore
         ):
             following = segments[-1][0]
             # Each state came before the next, even when it was written
-            # late and is dated after the start the next takes from its source.
+            # late and is dated after the start that the next takes from its source.
             segments += [
                 (min(end, following), None),
                 (min(start, math.nextafter(following, _NEG_INF)), value),

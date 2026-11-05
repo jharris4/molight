@@ -536,8 +536,8 @@ async def test_restored_color_dropped_without_color_members(
 
 @pytest.mark.asyncio
 async def test_color_temp_restored_after_restart(hass: HomeAssistant) -> None:
-    """A color-temperature state restores by its color_mode: the derived hs_color HA
-    stores alongside must not be mistaken for the authoritative color."""
+    """A color-temperature state restores by its color_mode: the derived hs_color that
+    HA stores alongside must not be mistaken for the authoritative color."""
     mock_restore_cache(
         hass,
         [

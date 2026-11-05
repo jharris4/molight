@@ -324,7 +324,7 @@ def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE
             return
         action, service, data = binding
         if action == REMOTE_ACTION_TOGGLE and len(targets) > 1:
-            # One unit, as a light group toggles: any target on turns all off.
+            # One unit, as a light group toggles: any target that is on turns all off.
             service = "turn_off" if _any_on(hass, targets) else "turn_on"
         calls = (
             _brightness_step_calls(hass, targets, data)

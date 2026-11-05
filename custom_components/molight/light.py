@@ -177,10 +177,10 @@ illuminance_mode:
     enter COUNTDOWN for the rest of it. It lasts until the later of
     bright_resume_until, recorded at the forced off, and a timeout after
     latest_occupied_time. bright_resume_until is when the interrupted
-    timer would have finished, or a timeout from the forced off for a light
+    timer would have finished, or a timeout from the forced off for a light that
     presence was holding (whoever held it was there until then at least); an
     off warning sequence or standby leaves none. An on-period ended any other
-    way (manual off, timer, schedule) is never resumed, nor is one the user
+    way (manual off, timer, schedule) is never resumed, nor is one that the user
     turned off, or whose gate window ended, while going bright had it off.
   - Illuminance OFF→ON (dark→bright):
       Control:    go IDLE, turn lights off.
@@ -433,7 +433,6 @@ from .helpers import (
     entry_settings,
     group_leaves,
     light_descendants,
-    light_timeout,
     lights_lit_with,
     lights_support_brightness,
     lights_support_transition,
@@ -441,6 +440,7 @@ from .helpers import (
     same_entity,
     send_event,
     suggested_entity_id,
+    turn_off_timeout,
     virtual_light_entries,
 )
 from .issues import (
@@ -1022,7 +1022,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
         self._lights: list[str] = cfg.get(CONF_LIGHTS, [])
         self._is_scheduled_light = cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT
-        self._schedule_entity: str | None = cfg.get(CONF_SCHEDULE_ENTITY)
+        self._schedule_sensor: str | None = cfg.get(CONF_SCHEDULE_ENTITY)
         self._schedule_end_action = cfg.get(
             CONF_SCHEDULE_END_ACTION, DEFAULT_SCHEDULE_END_ACTION
         )
@@ -1108,7 +1108,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         # it must not replay the bright/dark edge actions.
         self._illuminance_last_bright: bool | None = None
         # Last known occupied/clear, None until first seen; a recovery
-        # matching it must not turn a light the user turned off on again.
+        # matching it must not turn a light that the user turned off on again.
         self._occupancy_last_on: bool | None = None
         # When its visit was first seen; its reload moves last_changed.
         self._occupancy_on_since: datetime | None = None
@@ -1217,7 +1217,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         re-applies the other settings set on every schedule boundary, so everything set
         here must be derivable from the settings set alone.
         """
-        self._light_timeout = light_timeout(cfg)
+        self._turn_off_timeout = turn_off_timeout(cfg)
         self._false_off_delay = int(
             cfg.get(CONF_FALSE_OFF_DELAY, DEFAULT_FALSE_OFF_DELAY)
         )
@@ -1253,14 +1253,16 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         # off. A duration of 0 disables its stage; effect_brightness is a 0-255
         # value (0 = blink fully off); warn_brightness is None to keep whatever
         # brightness the light had before the warning began.
-        self._effect_timeout = int(cfg.get(CONF_EFFECT_TIMEOUT, DEFAULT_EFFECT_TIMEOUT))
+        self._effect_duration = int(
+            cfg.get(CONF_EFFECT_TIMEOUT, DEFAULT_EFFECT_TIMEOUT)
+        )
         self._effect_brightness = round(
             percentage_to_ranged_value(
                 (1, 255),
                 int(cfg.get(CONF_EFFECT_BRIGHTNESS, DEFAULT_EFFECT_BRIGHTNESS)),
             )
         )
-        self._warn_timeout = int(cfg.get(CONF_WARN_TIMEOUT, DEFAULT_WARN_TIMEOUT))
+        self._warn_duration = int(cfg.get(CONF_WARN_TIMEOUT, DEFAULT_WARN_TIMEOUT))
         warn_pct = int(cfg.get(CONF_WARN_BRIGHTNESS) or 0)
         self._warn_brightness = (
             round(percentage_to_ranged_value((1, 255), warn_pct)) if warn_pct else None
@@ -1289,7 +1291,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             CONF_OCCUPANCY_TURN_ON, DEFAULT_OCCUPANCY_TURN_ON
         )
         self._maintain_occupancy_sensor = cfg.get(CONF_MAINTAIN_OCCUPANCY_ENTITY)
-        self._illuminance_entity = cfg.get(CONF_ILLUMINANCE_ENTITY)
+        self._illuminance_sensor = cfg.get(CONF_ILLUMINANCE_ENTITY)
         self._illuminance_mode = cfg.get(
             CONF_ILLUMINANCE_MODE, DEFAULT_ILLUMINANCE_MODE
         )
@@ -1301,7 +1303,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         self._match_schedule_after_restart = cfg.get(
             CONF_MATCH_SCHEDULE_AFTER_RESTART, DEFAULT_MATCH_SCHEDULE_AFTER_RESTART
         )
-        self._door_entity = cfg.get(CONF_DOOR_ENTITY)
+        self._door_sensor = cfg.get(CONF_DOOR_ENTITY)
         self._door_mode = cfg.get(CONF_DOOR_MODE, DEFAULT_DOOR_MODE)
         self._keep_on_entities = cfg.get(CONF_HOLD_ENTITIES, [])
 
@@ -1329,7 +1331,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 if same_entity(
                     self.hass,
                     last.attributes.get(ATTR_ACTIVE_SETTINGS_SCHEDULE),
-                    self._schedule_entity,
+                    self._schedule_sensor,
                 ):
                     active = last.attributes.get(ATTR_ACTIVE_SETTINGS)
                     if active in (ACTIVE_SETTINGS_INSIDE, ACTIVE_SETTINGS_OUTSIDE):
@@ -1373,11 +1375,11 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             # save that predates the schedule record is trusted.
             saved_schedule = last.attributes.get(ATTR_SCHEDULE_WINDOW_SCHEDULE)
             if (
-                self._schedule_entity
+                self._schedule_sensor
                 and self._schedule_mode == SCHEDULE_MODE_FOLLOW
                 and (
                     saved_schedule is None
-                    or same_entity(self.hass, saved_schedule, self._schedule_entity)
+                    or same_entity(self.hass, saved_schedule, self._schedule_sensor)
                 )
             ):
                 self._schedule_window_applied = last.attributes.get(
@@ -1387,7 +1389,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 # A Gate and turn off schedule end off pending the hold's release.
                 self._schedule_end_off_pending = (
                     self._schedule_mode == SCHEDULE_MODE_GATE
-                    and bool(self._schedule_entity)
+                    and bool(self._schedule_sensor)
                     and bool(last.attributes.get(ATTR_SCHEDULE_END_OFF_PENDING))
                 )
             self._bright_forced_off = bool(last.attributes.get("bright_forced_off"))
@@ -1460,8 +1462,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self._show_restored(last)
 
         watch = list(self._lights)
-        if self._schedule_entity:
-            watch.append(self._schedule_entity)
+        if self._schedule_sensor:
+            watch.append(self._schedule_sensor)
         for settings in self._settings_sets:
             watch.extend(
                 entity_id
@@ -1533,7 +1535,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     def _on_early_member_report(self, event: Event[EventStateChangedData]) -> None:
         """Stop awaiting a command made before the seed once it is outdated.
 
-        A member someone else has switched the other way since then no longer
+        A member that someone else has switched the other way since then no longer
         answers it: the seed reads that member as it is.
         """
         entity_id = event.data["entity_id"]
@@ -1644,7 +1646,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     def _warn_rejected_keep_on_entities(self) -> None:
         """Name keep-on entities the form now rejects; they never act as one.
 
-        A light that is on whenever this one is holds it for good, or, as a
+        A light that is on whenever this one is on holds it for good, or, as a
         member, never; an entity that never reads on never holds.
         """
         keep_on_entities = list(
@@ -1717,11 +1719,11 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         if not self._is_scheduled_light:
             return
         schedule = (
-            self.hass.states.get(self._schedule_entity)
-            if self._schedule_entity
+            self.hass.states.get(self._schedule_sensor)
+            if self._schedule_sensor
             else None
         )
-        if not self._schedule_entity:
+        if not self._schedule_sensor:
             inside = False
         elif schedule is not None and schedule.state in ("on", "off"):
             inside = schedule.state == "on"
@@ -1766,7 +1768,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 self._clear_bright_forced_off()
             elif self._schedule_end_action == SCHEDULE_END_ACTION_SWITCH:
                 self._schedule_end_switch_pending = True
-        if not self._schedule_entity:
+        if not self._schedule_sensor:
             _LOGGER.warning(
                 "Virtual Scheduled Light %s has no schedule; "
                 "using outside-schedule settings",
@@ -1796,7 +1798,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
     def _settings_window(self) -> str | None:
         """Window marker of the schedule sensor (last known value if unreadable)."""
-        state = self.hass.states.get(self._schedule_entity or "")
+        state = self.hass.states.get(self._schedule_sensor or "")
         # Before the seed, the restored marker is the one the light acted on.
         if self._seeded and state is not None and state.state in ("on", "off"):
             self._settings_window_start = state.attributes.get("current_window_start")
@@ -1817,9 +1819,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self._schedule_end_switch_pending = False
             self._close_owed_ends()
         self._inside_schedule = inside
-        prev_door_entity = self._door_entity
+        prev_door_sensor = self._door_sensor
         prev_keep_on_states = self._keep_on_states
-        prev_illuminance_entity = self._illuminance_entity
+        prev_illuminance_sensor = self._illuminance_sensor
         prev_occupancy_sensor = self._occupancy_sensor
         prev_maintain_occupancy_sensor = self._maintain_occupancy_sensor
         self._apply_light_settings(
@@ -1834,14 +1836,14 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         # while it reads unavailable/unknown, which at the boundary must not
         # read as "closed" or "hold released", the same rule
         # _handle_state_change applies mid-run.
-        door = self.hass.states.get(self._door_entity) if self._door_entity else None
+        door = self.hass.states.get(self._door_sensor) if self._door_sensor else None
         if not (
             door is not None
             and door.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
-            and self._door_entity == prev_door_entity
+            and self._door_sensor == prev_door_sensor
         ):
             self._cancel_door_unavailable_timer()
-            self._read_door(door, same=self._door_entity == prev_door_entity)
+            self._read_door(door, same=self._door_sensor == prev_door_sensor)
         self._keep_on_states = {}
         for entity_id in self._keep_on_entities:
             state = self.hass.states.get(entity_id)
@@ -1856,8 +1858,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     state is not None and state.state == "on"
                 )
         if not (
-            self._illuminance_entity == prev_illuminance_entity
-            and (s := self.hass.states.get(self._illuminance_entity or "")) is not None
+            self._illuminance_sensor == prev_illuminance_sensor
+            and (s := self.hass.states.get(self._illuminance_sensor or "")) is not None
             and s.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
         ):
             self._illuminance_last_bright = self._live_illuminance_bright()
@@ -2008,8 +2010,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         self._held = self._compute_held()
 
         # An unavailable/unknown/missing door counts as closed at startup.
-        if self._door_entity:
-            self._read_door(self.hass.states.get(self._door_entity))
+        if self._door_sensor:
+            self._read_door(self.hass.states.get(self._door_sensor))
 
         self._illuminance_last_bright = self._live_illuminance_bright()
         self._schedule_last_on = self._live_schedule_on()
@@ -2094,7 +2096,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         }
 
     def _end_restored_on_period(self) -> None:
-        """Tell consumers the on-period a restart interrupted ended.
+        """Tell consumers that the on-period a restart interrupted ended.
 
         The lights were found off: switched off while Home Assistant was down.
         """
@@ -2204,7 +2206,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             and self._door_holds()
             and not self._bright_gates_presence()
             and not self._gate_schedule_inactive()
-            and (door_state := self.hass.states.get(self._door_entity)) is not None
+            and (door_state := self.hass.states.get(self._door_sensor)) is not None
             and not self._may_replay_manual_off(door_state, observed=False)
         ):
             self._on_door_change(is_open=True)
@@ -2275,9 +2277,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         down (apply it now) from one we already handled before the restart
         (leave the lights alone; if they're off, the user turned them off).
         """
-        if not self._schedule_entity or self._schedule_mode != SCHEDULE_MODE_FOLLOW:
+        if not self._schedule_sensor or self._schedule_mode != SCHEDULE_MODE_FOLLOW:
             return False
-        sched = self.hass.states.get(self._schedule_entity)
+        sched = self.hass.states.get(self._schedule_sensor)
         if sched is None or sched.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             if self._schedule_window_applied is None:
                 return False
@@ -2504,10 +2506,10 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             )
             return
         if new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
-            if entity_id == self._door_entity and self._door_open:
+            if entity_id == self._door_sensor and self._door_open:
                 self._start_door_unavailable_timer()
             if (
-                entity_id == self._illuminance_entity
+                entity_id == self._illuminance_sensor
                 and new_state.state == STATE_UNAVAILABLE
                 and not new_state.attributes.get(ATTR_RESTORED)
             ):
@@ -2567,7 +2569,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 member_recovered and self._machine_state == STATE_STANDBY
             )
             own_context = event.context.id in self._self_context_ids
-            # A report no user or automation is named for: the member's own.
+            # A report that no user or automation is named for: the member's own.
             unprompted = (
                 event.context.user_id is None and event.context.parent_id is None
             )
@@ -2587,7 +2589,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 own_context=own_context,
                 unprompted=unprompted,
             ):
-                # A member back at the brightness an unanswered command asked for
+                # A member back at the brightness that an unanswered command asked for
                 # may still have lost its selection: re-send like any other.
                 if resend and self._machine_state in (STATE_STANDBY, STATE_SCHEDULED):
                     self._reconcile_recovered_member()
@@ -2600,7 +2602,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     # A late reply on at brightness 0 still counts as off.
                     self._resend_on_settings()
                 return  # echo of our own service call; call sites manage state
-            # A member our own select call changed was not physically changed.
+            # A member that our own select call changed was not physically changed.
             claim = not (
                 event.context.id in self._waiting_turn_ons
                 or self._selecting_on_device_of(entity_id, event.context)
@@ -2614,7 +2616,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 self._mirror_member(new_state)
                 return
             if not claim and self._resend_after_select:
-                # Changed by the selection of a turn-on a newer command
+                # Changed by the selection of a turn-on that a newer command
                 # replaced: that command is sent again when the call ends.
                 return
             if same_state:
@@ -2662,7 +2664,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 and lit
                 and (self._machine_state != STATE_IDLE or self._turn_on_waiting())
             ):
-                # A wrapped light its own sensor lit while this light is on:
+                # A wrapped light that its own sensor lit while this light is on:
                 # shown, but no activity that restarts the timer or a warning.
                 self._mirror_member(new_state)
                 return
@@ -2690,7 +2692,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 self._on_schedule_change(new_state)
             if (
                 self._is_scheduled_light
-                and entity_id == self._schedule_entity
+                and entity_id == self._schedule_sensor
                 and _window_moved(old_state, new_state)
             ):
                 self._settings_window_seen = new_state.attributes.get(
@@ -2714,7 +2716,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         # (whose seeding in _switch_scheduled_settings already read it).
         if (
             self._is_scheduled_light
-            and entity_id == self._schedule_entity
+            and entity_id == self._schedule_sensor
             and new_state.state in ("on", "off")
         ):
             inside = new_state.state == "on"
@@ -2737,7 +2739,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             else:
                 self._switch_scheduled_settings(inside)
         # A keep-on entity engages before its other roles act, so none of them
-        # issues an automatic turn-off it holds; a release is applied after them.
+        # issues an automatic turn-off that it holds; a release is applied after them.
         holding = entity_id in self._keep_on_entities and new_state.state == "on"
         if holding:
             self._keep_on_states[entity_id] = True
@@ -2777,7 +2779,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         if entity_id == self._maintain_occupancy_sensor:
             self._maintain_last_on = new_state.state == "on"
             self._on_maintain_change(self._maintain_last_on)
-        if entity_id == self._illuminance_entity:
+        if entity_id == self._illuminance_sensor:
             bright = new_state.state == "on"
             # The seed could not read it: its first state is no observed edge.
             first = recovered and self._illuminance_last_bright is None
@@ -2787,7 +2789,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 self._on_illuminance_change(bright, first=first)
         if (
             not self._is_scheduled_light
-            and entity_id == self._schedule_entity
+            and entity_id == self._schedule_sensor
             and new_state.state in ("on", "off")
         ):
             schedule_on = new_state.state == "on"
@@ -2800,7 +2802,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 replay_since=(old_state or new_state).last_changed if replay else None,
                 first=first,
             )
-        if entity_id == self._door_entity:
+        if entity_id == self._door_sensor:
             self._cancel_door_unavailable_timer()
             door_was_open = self._door_open
             self._door_open = new_state.state in _DOOR_OPEN_STATES
@@ -2873,9 +2875,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self._occupancy_on_since = None
         if entity_id == self._maintain_occupancy_sensor:
             self._maintain_last_on = None
-        if entity_id == self._illuminance_entity:
+        if entity_id == self._illuminance_sensor:
             self._illuminance_gone()
-        if entity_id == self._door_entity:
+        if entity_id == self._door_sensor:
             # As at startup: closed, and its next report is a first sighting.
             self._cancel_door_unavailable_timer()
             self._door_open = False
@@ -2884,7 +2886,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         if entity_id in (
             self._occupancy_sensor,
             self._maintain_occupancy_sensor,
-            self._door_entity,
+            self._door_sensor,
         ):
             self._release_presence()
         if self._keep_on_states.get(entity_id):
@@ -2968,7 +2970,10 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self._owed = None
 
     def _owed_look(self) -> tuple[int | None, dict | None] | None:
-        """Return the pre-warning look unreadable members owe while the light is off."""
+        """Return the pre-warning look that unreadable members owe.
+
+        Only while the light is off: None once it is lit or nothing is owed.
+        """
         if self._owed is None or self._is_lit():
             return None
         return self._owed.look
@@ -2978,7 +2983,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     ) -> bool:
         """Return True when a follow schedule that stays on moved its marker."""
         return (
-            entity_id == self._schedule_entity
+            entity_id == self._schedule_sensor
             and self._schedule_mode == SCHEDULE_MODE_FOLLOW
             and _window_moved(old_state, new_state)
         )
@@ -2998,7 +3003,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         """Handle a real light being turned on/off physically.
 
         brightness and color are what the real light reported with its on.
-        claim is False for a turn-on our own select call caused. touched is
+        claim is False for a turn-on that our own select call caused. touched is
         the real light that changed. send_turned_on is False when no person
         or other automation is known to have turned it on: our own select
         call, or a member left on after a failed command. human is False for
@@ -3063,7 +3068,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
         Dimming or recoloring is human activity: record it and restart any
         running timer with the full timeout. Brightness 0 counts as off. claim
-        is False for a change our own select call caused;
+        is False for a change that our own select call caused;
         human is False for a wrapped virtual light's own stage or standby,
         which is shown but not acted on. retrigger is a person's turn-on of
         a wrapped virtual light that was on, which changes neither.
@@ -3197,10 +3202,10 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         self._occupancy_lit_lights = False
         self._standby_suppressed = False
         self._command_generation += 1
-        self._resend_after_select = False  # what the physical change set stands
+        self._resend_after_select = False  # what the physical change has set stands
 
     def _restore_untouched(self, touched: str) -> None:
-        """Undo the warning on the real lights a physical change left alone.
+        """Undo the warning on the real lights that a physical change left alone.
 
         The change cancels the warning for all of them, so the others go
         back to their pre-warning look, as after any other re-trigger. The
@@ -3228,12 +3233,12 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         self.async_write_ha_state()
 
     def _selecting_on_device_of(self, entity_id: str, context: Context) -> bool:
-        """Return True for a report a select call on this member's device made.
+        """Return True for a report that a select call on this member's device made.
 
         A preset that lights its device's light is reported by a push of the
         device's, under a context of its own. Each call speaks for the device
         it was made on, also once the settings name another select entity.
-        A report a user or another automation is named for is theirs.
+        A report that a user or another automation is named for is theirs.
         """
         if context.user_id is not None or (
             context.parent_id is not None
@@ -3527,9 +3532,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         )
 
     def _turn_on_waiting(self, *, virtual: bool = False) -> bool:
-        """Return True while a turn-on nothing overtook waits for its selection.
+        """Return True while a turn-on that nothing overtook waits for its selection.
 
-        With virtual, only one the user made through this entity counts.
+        With virtual, only one that the user made through this entity counts.
         """
         return any(
             not self._overtaken(waiting)
@@ -3639,7 +3644,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         """Mirror what the members came on at when our command named no value.
 
         A value named by a command still awaiting its reply is left alone. A
-        named color we could not report when it was sent (an unreadable member
+        named color that we could not report when it was sent (an unreadable member
         brings its color modes with its reply) is mirrored now.
         """
         if not expectation.on or not expectation.mirror:
@@ -3697,9 +3702,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         on, occupancy and the door behave as inside the window (adopt, hold,
         re-hold). Their difference is whether the window end
         recalculates or preserves the running state/timer. An unreadable
-        schedule blocks turn-ons, but ends no hold its window allowed.
+        schedule blocks turn-ons, but ends no hold that its window allowed.
         """
-        if not self._schedule_entity or self._schedule_mode not in (
+        if not self._schedule_sensor or self._schedule_mode not in (
             SCHEDULE_MODE_GATE,
             SCHEDULE_MODE_GATE_SWITCH,
             SCHEDULE_MODE_GATE_KEEP,
@@ -3717,16 +3722,16 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
     def _gate_and_turn_off_schedule_inactive(self) -> bool:
         """Return True when a Gate and turn off schedule reads off."""
-        if self._schedule_mode != SCHEDULE_MODE_GATE or not self._schedule_entity:
+        if self._schedule_mode != SCHEDULE_MODE_GATE or not self._schedule_sensor:
             return False
-        state = self.hass.states.get(self._schedule_entity)
+        state = self.hass.states.get(self._schedule_sensor)
         return state is not None and state.state == "off"
 
     def _follow_schedule_state(self) -> State | None:
         """Return the schedule state when in follow mode and ON, else None."""
-        if not self._schedule_entity or self._schedule_mode != SCHEDULE_MODE_FOLLOW:
+        if not self._schedule_sensor or self._schedule_mode != SCHEDULE_MODE_FOLLOW:
             return None
-        state = self.hass.states.get(self._schedule_entity)
+        state = self.hass.states.get(self._schedule_sensor)
         return state if state is not None and state.state == "on" else None
 
     # ------------------------------------------------------------------
@@ -3789,8 +3794,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self._apply_window_start(sched.attributes.get("current_window_start"))
             return
         schedule_state = (
-            self.hass.states.get(self._schedule_entity)
-            if self._schedule_entity
+            self.hass.states.get(self._schedule_sensor)
+            if self._schedule_sensor
             else None
         )
         if (
@@ -3807,11 +3812,11 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self.async_write_ha_state()
             return
         if (
-            self._schedule_entity
+            self._schedule_sensor
             and self._schedule_mode == SCHEDULE_MODE_FOLLOW
             and self._schedule_window_applied is not None
         ):
-            # The follow window we turned on for ended while held.
+            # The follow window that we turned on for ended while held.
             self._schedule_window_applied = None
             self.hass.async_create_task(self._auto_lights_off())
             self._go_idle(reason=REASON_SCHEDULE_END)
@@ -3896,7 +3901,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         duration = (
             self._compute_occupancy_timer()
             if has_occupancy_or_maintain
-            else self._light_timeout
+            else self._turn_off_timeout
         )
         if self._held:
             # The state switches now, while the usual hold policy suppresses
@@ -4018,7 +4023,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             )
             door_holds = self._door_holds()
             if replay_since is not None:
-                # Only a start the unreadable gate blocked is applied now; a
+                # Only a start that the unreadable gate blocked is applied now; a
                 # light turned off manually in an occupied room stays off.
                 replay_since = self._after_manual_off(replay_since)
                 occ_active = (
@@ -4030,12 +4035,12 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     and self._door_open_since >= replay_since
                 )
             elif first:
-                # As at the seed, presence a manual off ended lights nothing.
+                # As at the seed, presence that a manual off ended lights nothing.
                 occ_active = occ_active and not self._may_replay_manual_off(
                     occ_state, observed=False
                 )
                 door_holds = door_holds and not self._may_replay_manual_off(
-                    self.hass.states.get(self._door_entity), observed=False
+                    self.hass.states.get(self._door_sensor), observed=False
                 )
             if occ_active or door_holds:
                 now = datetime.now(UTC)
@@ -4067,9 +4072,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 self._auto_on_transition, selection=True, force_selection=True
             )
             return True
-        if self._schedule_mode != SCHEDULE_MODE_FOLLOW or not self._schedule_entity:
+        if self._schedule_mode != SCHEDULE_MODE_FOLLOW or not self._schedule_sensor:
             return False
-        sched = self.hass.states.get(self._schedule_entity)
+        sched = self.hass.states.get(self._schedule_sensor)
         if sched is None or sched.state not in ("on", "off"):
             return False
         if sched.state == "off":
@@ -4128,10 +4133,10 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         if (
             self._schedule_window_applied is None
             or self._schedule_mode != SCHEDULE_MODE_FOLLOW
-            or not self._schedule_entity
+            or not self._schedule_sensor
         ):
             return
-        state = self.hass.states.get(self._schedule_entity)
+        state = self.hass.states.get(self._schedule_sensor)
         if state is not None and state.state == "off":
             self._schedule_window_applied = None
 
@@ -4365,8 +4370,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     def _may_replay_manual_off(self, state: State | None, *, observed: bool) -> bool:
         """Return True when presence may be the visit a manual off ended.
 
-        Only while that off stands: a visit the sensor dates after it may
-        light the light, and one it cannot date only when seen to start live.
+        Only while that off stands: a visit that the sensor dates after it may
+        light the light, and one that it cannot date only when seen to start live.
         A sensor with no state, such as a door awaiting its reload, dates nothing.
         """
         if self._is_lit() or not self._manual_off_stands():
@@ -4381,7 +4386,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         return self._last_off_manual is None or started <= self._last_off_manual
 
     def _visit_started(self, state: State) -> datetime:
-        """When the visit the occupancy sensor reports began.
+        """When the visit that the occupancy sensor reports began.
 
         Its own timestamp if it has one, else when this light first saw it on:
         a sensor that reloads mid-visit comes back with a new last_changed.
@@ -4429,15 +4434,15 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         starting, or a Virtual Scheduled Light switching settings each re-read
         occupancy live, and an unreadable sensor counted as clear then.
         """
-        checks = [(self._illuminance_entity, ("off", STATE_UNAVAILABLE))]
+        checks = [(self._illuminance_sensor, ("off", STATE_UNAVAILABLE))]
         if self._schedule_mode in (
             SCHEDULE_MODE_GATE,
             SCHEDULE_MODE_GATE_SWITCH,
             SCHEDULE_MODE_GATE_KEEP,
         ):
-            checks.append((self._schedule_entity, ("on",)))
+            checks.append((self._schedule_sensor, ("on",)))
         if self._is_scheduled_light:
-            checks.append((self._schedule_entity, ("on", "off")))
+            checks.append((self._schedule_sensor, ("on", "off")))
         for entity_id, lifted_states in checks:
             state = self.hass.states.get(entity_id) if entity_id else None
             if (
@@ -4505,18 +4510,18 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
     def _live_schedule_on(self) -> bool | None:
         """Live on/off of the schedule sensor, None when unknown."""
-        if not self._schedule_entity:
+        if not self._schedule_sensor:
             return None
-        state = self.hass.states.get(self._schedule_entity)
+        state = self.hass.states.get(self._schedule_sensor)
         if state is None or state.state not in ("on", "off"):
             return None
         return state.state == "on"
 
     def _live_illuminance_bright(self) -> bool | None:
         """Live bright/dark of the illuminance sensor, None when unknown."""
-        if not self._illuminance_entity:
+        if not self._illuminance_sensor:
             return None
-        state = self.hass.states.get(self._illuminance_entity)
+        state = self.hass.states.get(self._illuminance_sensor)
         if state is None or state.state not in ("on", "off"):
             return None
         return state.state == "on"
@@ -4533,7 +4538,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         unavailable keeps holding, until it has been unavailable for
         DOOR_UNAVAILABLE_TIMEOUT.
         """
-        if not self._door_entity or self._door_mode != DOOR_MODE_OPEN_CLOSE:
+        if not self._door_sensor or self._door_mode != DOOR_MODE_OPEN_CLOSE:
             return False
         return self._door_open and not self._gate_and_turn_off_schedule_inactive()
 
@@ -4647,7 +4652,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                         → turn on if occupied, or resume an
                           on-period that going bright cut short.
         With first, the seed could not read the sensor and counted it as
-        dark, so presence a manual off ended lights nothing now either.
+        dark, so presence that a manual off ended lights nothing now either.
         """
         if self._machine_state == STATE_SCHEDULED:
             return  # follow-mode window owns the lights
@@ -4690,7 +4695,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     occ_state, observed=False
                 )
                 door_holds = door_holds and not self._may_replay_manual_off(
-                    self.hass.states.get(self._door_entity), observed=False
+                    self.hass.states.get(self._door_sensor), observed=False
                 )
             occ_turns_on = occ_active and self._molight_turns_on_for_occupancy()
             if (occ_turns_on or door_holds) and not schedule_gated:
@@ -4714,8 +4719,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     and not self._gate_and_turn_off_schedule_inactive()
                 ):
                     # Time left of the on-period justified the turn-on; the maintain
-                    # occupancy sensor, or presence a gate blocking only turn-ons let
-                    # through once the light is on, now holds the resumed light.
+                    # occupancy sensor, or presence that a gate blocking only turn-ons
+                    # let through once the light is on, now holds the resumed light.
                     self._machine_state = STATE_OCCUPIED
                     self._cancel_timer()
                 else:
@@ -4737,26 +4742,26 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
     def _countdown_state(self) -> str:
         """COUNTDOWN when a turn-off timer can run; a blank timeout runs none."""
-        return STATE_ACTIVE if self._light_timeout is None else STATE_COUNTDOWN
+        return STATE_ACTIVE if self._turn_off_timeout is None else STATE_COUNTDOWN
 
     def _false_off_timer(self) -> int:
         """Return the false-detection off delay, capped at the turn-off timeout."""
-        if self._light_timeout is None:
+        if self._turn_off_timeout is None:
             return self._false_off_delay
-        return min(self._false_off_delay, self._light_timeout)
+        return min(self._false_off_delay, self._turn_off_timeout)
 
     def _compute_occupancy_timer(self) -> int | None:
         """Seconds to wait after occupancy clears before turning lights off.
 
         Anchors to the latest_occupied_time across the occupancy and maintain
         occupancy sensors (whichever saw the person last) so that each sensor's
-        occupancy timeout is respected: the lights go off light_timeout
-        seconds after the person actually left, i.e. at
-        latest_occupied_time + light_timeout, which is why light_timeout must
-        be >= the sensor's occupancy_timeout (the flows enforce it). None
+        occupancy timeout is respected: the lights go off a turn-off timeout
+        after the person actually left, i.e. at latest_occupied_time plus the
+        turn-off timeout, which is why the turn-off timeout must be at least
+        the sensor's occupancy timeout (the flows enforce it). None
         with a blank timeout: nothing turns the lights off.
         """
-        base = self._light_timeout
+        base = self._turn_off_timeout
         if base is None:
             return None
         if lots := self._occupancy_lots():
@@ -4792,7 +4797,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         ]
         if user_ons:
             elapsed = (datetime.now(UTC) - max(user_ons)).total_seconds()
-            timer_seconds = max(timer_seconds, int(self._light_timeout - elapsed))
+            timer_seconds = max(timer_seconds, int(self._turn_off_timeout - elapsed))
         return timer_seconds
 
     def _occupancy_lots(self) -> list[datetime]:
@@ -4819,9 +4824,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         end: it ran under a blank timeout.
         """
         lots = self._occupancy_lots()
-        if lots and self._light_timeout is None:
+        if lots and self._turn_off_timeout is None:
             return None
-        ends = [lot + timedelta(seconds=self._light_timeout) for lot in lots]
+        ends = [lot + timedelta(seconds=self._turn_off_timeout) for lot in lots]
         if self._bright_resume_until is not None:
             ends.append(self._bright_resume_until)
         if not ends:
@@ -4907,7 +4912,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             # light was there until now, so it lasts a timeout at least. An
             # on-period with no timer to end it resumes whenever it is dark.
             resume_until = self._timer_finishes_at
-            if resume_until is None and self._light_timeout is None:
+            if resume_until is None and self._turn_off_timeout is None:
                 if self._machine_state in (
                     STATE_ACTIVE,
                     STATE_COUNTDOWN,
@@ -4916,7 +4921,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     resume_until = _NO_END
             elif resume_until is None and self._machine_state == STATE_OCCUPIED:
                 resume_until = datetime.now(UTC) + timedelta(
-                    seconds=self._light_timeout
+                    seconds=self._turn_off_timeout
                 )
         self._cancel_timer()
         self._command_generation += 1
@@ -4957,9 +4962,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             # timer is armed; releasing the hold starts a fresh one.
             return
         if duration is None:
-            if self._light_timeout is None:
+            if self._turn_off_timeout is None:
                 return  # a blank timeout: the lights stay on
-            duration = self._light_timeout
+            duration = self._turn_off_timeout
             self._fresh_timer_started = datetime.now(UTC)
         self._timer_finishes_at = datetime.now(UTC) + timedelta(seconds=duration)
         self._timer_unsub = async_call_later(self.hass, duration, self._timer_finished)
@@ -5031,7 +5036,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         send_event(self.hass, self._entry_id, event_type, **attributes)
 
     def _send_blocked(self, trigger: str, reason: str) -> None:
-        """Send a trigger a gate blocked, when it would have lit the room."""
+        """Send a trigger that a gate blocked, when it would have lit the room."""
         if not self._is_lit():
             self._send_event(EVENT_TURN_ON_BLOCKED, trigger=trigger, reason=reason)
 
@@ -5116,15 +5121,15 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         # Recorded rather than re-derived in _enter_warn: switching settings
         # mid-effect can swap _effect_color out from under the running stage.
         self._effect_sent_color = (
-            self._effect_timeout > 0 and self._effect_color is not None
+            self._effect_duration > 0 and self._effect_color is not None
         )
         reason = self._timer_reason
-        if self._effect_timeout > 0:
+        if self._effect_duration > 0:
             self._machine_state = STATE_EFFECT
             self._send_event(
                 EVENT_OFF_WARNING,
                 stage=STAGE_EFFECT,
-                off_in=self._effect_timeout + self._warn_timeout,
+                off_in=self._effect_duration + self._warn_duration,
                 standby=self._can_be_at_standby(),
                 brightness=self._effect_brightness,
                 color=_event_color(self._effect_color),
@@ -5137,14 +5142,14 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     self._effect_brightness, self._effect_color, own_color=False
                 ),
             )
-            self._start_timer(self._effect_timeout, reason=reason)
+            self._start_timer(self._effect_duration, reason=reason)
             self.async_write_ha_state()
             return
         self._enter_warn()
 
     def _enter_warn(self) -> None:
         """Advance to the warn stage, or turn off when it is disabled."""
-        if self._warn_timeout > 0:
+        if self._warn_duration > 0:
             # A warn stage without a color of its own undoes an effect-stage
             # recolor, mirroring how its brightness falls back to the
             # pre-warning brightness.
@@ -5173,13 +5178,13 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self._send_event(
                 EVENT_OFF_WARNING,
                 stage=STAGE_WARN,
-                off_in=self._warn_timeout,
+                off_in=self._warn_duration,
                 standby=self._can_be_at_standby(),
                 brightness=brightness,
                 color=_event_color(color),
             )
             self._show_stage(brightness, self._warn_transition, color, looks)
-            self._start_timer(self._warn_timeout, reason=self._timer_reason)
+            self._start_timer(self._warn_duration, reason=self._timer_reason)
             self.async_write_ha_state()
             return
         self._finish_auto_off()
@@ -5417,8 +5422,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         """Command the real lights; False when a newer command overtook it.
 
         Only an off, a newer virtual turn-on or a physical change overtakes
-        a turn-on waiting for its selection. A stage the timer reaches
-        meanwhile is replaced by a virtual turn-on, as the user's command
+        a turn-on waiting for its selection. A stage that the timer
+        reaches meanwhile is replaced by a virtual turn-on, as the user's command
         lights the room with the user's settings; an automatic turn-on, or a
         re-send, sends that stage instead of the look it was issued with. An
         automatic turn-on issued while a virtual one waits is dropped. An
@@ -5607,7 +5612,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
         Called at once for one member, and for a group once a slow member's
         reply would have settled; a reply that came meanwhile stands. A
-        member a newer command has reached since is left to that one. With
+        member that a newer command has reached since is left to that one. With
         nothing lit, a light reporting on goes idle, as it does when its lit
         member is deleted; one reporting off while a member is still lit
         adopts it, as it would a bulb lit by nobody.
@@ -5645,11 +5650,11 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         self.async_write_ha_state()
 
     def _on_turn_on_cancelled(self, waiting: _WaitingTurnOn) -> None:
-        """Take back the on a turn-on reported when its caller was stopped.
+        """Take back the on that a turn-on reported when its caller was stopped.
 
         A script or automation stopped while the select call ran sends
-        nothing more. A newer command stands; an automatic on-period the
-        turn-on had replaced gets its lights after all.
+        nothing more. A newer command stands; an automatic on-period that
+        the turn-on had replaced gets its lights after all.
         """
         if self._removed or self.hass.is_stopping:
             return
@@ -5845,12 +5850,12 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             "pre_warn_brightness": look[0] if look else self._pre_warn_brightness,
             "pre_warn_color": look[1] if look else self._pre_warn_color,
             "schedule_window_start": window,
-            ATTR_SCHEDULE_WINDOW_SCHEDULE: self._schedule_entity if window else None,
+            ATTR_SCHEDULE_WINDOW_SCHEDULE: self._schedule_sensor if window else None,
             "bright_forced_off": self._bright_forced_off,
             "bright_resume_until": _fmt(self._bright_resume_until),
         }
         end_off = self._schedule_end_off_pending or bool(owed and owed.end_off)
-        if self._schedule_mode == SCHEDULE_MODE_GATE and self._schedule_entity:
+        if self._schedule_mode == SCHEDULE_MODE_GATE and self._schedule_sensor:
             attributes[ATTR_SCHEDULE_END_OFF_PENDING] = end_off
         if self._is_scheduled_light:
             attributes[ATTR_ACTIVE_SETTINGS] = (
@@ -5861,6 +5866,6 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             attributes[ATTR_SCHEDULE_END_OFF_PENDING] = end_off
             attributes[ATTR_STANDBY_SUPPRESSED] = self._standby_suppressed
             attributes[ATTR_MANUAL_OFF_CLEARED] = self._manual_off_cleared
-            attributes[ATTR_ACTIVE_SETTINGS_SCHEDULE] = self._schedule_entity
+            attributes[ATTR_ACTIVE_SETTINGS_SCHEDULE] = self._schedule_sensor
             attributes[ATTR_ACTIVE_SETTINGS_WINDOW] = self._settings_window()
         return attributes

@@ -1729,7 +1729,7 @@ async def test_combined_late_maintain_source_loading_off_ends_the_wait(
 async def test_combined_visit_that_ended_cannot_be_carried_later(
     hass: HomeAssistant, freezer, ended_during: str
 ) -> None:
-    """A restored visit every constituent reported over is finished: a
+    """A restored visit that every constituent reported over is finished: a
     maintain source coming back much later, undated, does not revive it."""
     room = _LateRoom()
     await room.setup(hass)
@@ -3502,7 +3502,7 @@ async def test_combined_judges_a_clear_by_the_constituent_that_cleared(
 async def test_combined_constituent_added_mid_visit_brings_only_history(
     hass: HomeAssistant, freezer, nested: bool, role: str, genuine_before: bool
 ) -> None:
-    """History a constituent added during a visit already carries is no
+    """History that a constituent added during a visit already carries is no
     detection in that visit; a detection the visit did contain is kept."""
     old = (datetime.now(UTC) - timedelta(seconds=60)).isoformat()
     hass.states.async_set("binary_sensor.m1", "off")

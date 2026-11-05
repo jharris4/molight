@@ -260,7 +260,7 @@ def _with_new_entity_ids(cfg: Any) -> Any:
 
 def test_reference_fixtures_cover_every_entity_id_key() -> None:
     """A key added to the entity ID change walk needs entry settings above
-    referencing it."""
+    that reference it."""
     used = set()
     for cfg in _REFERENCING_SETTINGS.values():
         used |= set(cfg)

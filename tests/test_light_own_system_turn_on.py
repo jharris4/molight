@@ -450,7 +450,7 @@ async def test_a_manual_off_inside_the_wait_drops_the_follow_up(hass, freezer) -
 
 @pytest.mark.asyncio
 async def test_every_real_light_of_the_turn_on_counts_once(hass, freezer) -> None:
-    """A second real light its own system turns on is part of the same turn-on."""
+    """A second real light that its own system turns on is part of the same turn-on."""
     second = RealLight("real_2")
     records, _calls, lamp = await _setup(
         hass,

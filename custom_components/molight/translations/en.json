@@ -216,7 +216,7 @@
               "clear_on_unavailable_timeout": "Clear after unavailable"
             },
             "data_description": {
-              "false_detection_grace": "If the sensor stays on no longer than its occupancy timeout plus this many seconds, it saw only one brief movement, almost certainly a false detection (a fly, a heat blip). Lights it turned on then turn off after their false-detection off delay. 0 disables.",
+              "false_detection_grace": "If the sensor stays on no longer than its occupancy timeout plus this many seconds, it saw only one brief movement, almost certainly a false detection (a fly, a heat blip). Lights that it turned on then turn off after their false-detection off delay. 0 disables.",
               "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupied, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then keeps its last known value)."
             }
           }
@@ -288,7 +288,7 @@
               "auto_off_transition": "Auto-off transition"
             },
             "data_description": {
-              "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
+              "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light that it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual turn-ons keep their own color.",
@@ -354,7 +354,7 @@
               "entity_id": "Entity ID"
             },
             "data_description": {
-              "false_detection_grace": "If the sensor stays on no longer than its occupancy timeout plus this many seconds, it saw only one brief movement, almost certainly a false detection (a fly, a heat blip). Lights it turned on then turn off after their false-detection off delay. 0 disables.",
+              "false_detection_grace": "If the sensor stays on no longer than its occupancy timeout plus this many seconds, it saw only one brief movement, almost certainly a false detection (a fly, a heat blip). Lights that it turned on then turn off after their false-detection off delay. 0 disables.",
               "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupied, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then keeps its last known value).",
               "entity_id": "Optional. Leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; change it later in Home Assistant's entity settings."
             }
@@ -584,7 +584,7 @@
               "auto_off_transition": "Auto-off transition"
             },
             "data_description": {
-              "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
+              "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light that it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual turn-ons keep their own color.",
@@ -713,7 +713,7 @@
               "auto_off_transition": "Auto-off transition"
             },
             "data_description": {
-              "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
+              "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light that it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
@@ -805,7 +805,7 @@
               "auto_off_transition": "Auto-off transition"
             },
             "data_description": {
-              "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
+              "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light that it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
@@ -924,10 +924,10 @@
               "on_rgb_color": "Color"
             },
             "data_description": {
-              "on_brightness": "Optional. The brightness Turn on applies, also to a light that is already on. Leave blank to turn the lights on at their last brightness.",
+              "on_brightness": "Optional. The brightness that Turn on applies, also to a light that is already on. Leave blank to turn the lights on at their last brightness.",
               "on_color_mode": "Optional. Whether Turn on applies a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
-              "on_color_temp": "Optional. The white color temperature Turn on applies, for lights that support it.",
-              "on_rgb_color": "Optional. The color Turn on applies, for lights that can show it."
+              "on_color_temp": "Optional. The white color temperature that Turn on applies, for lights that support it.",
+              "on_rgb_color": "Optional. The color that Turn on applies, for lights that can show it."
             }
           },
           "turn_off": {
@@ -1279,7 +1279,7 @@
               "auto_off_transition": "Auto-off transition"
             },
             "data_description": {
-              "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
+              "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light that it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
@@ -1371,7 +1371,7 @@
               "auto_off_transition": "Auto-off transition"
             },
             "data_description": {
-              "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
+              "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light that it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
@@ -1464,7 +1464,7 @@
               "clear_on_unavailable_timeout": "Clear after unavailable"
             },
             "data_description": {
-              "false_detection_grace": "If the sensor stays on no longer than its occupancy timeout plus this many seconds, it saw only one brief movement, almost certainly a false detection (a fly, a heat blip). Lights it turned on then turn off after their false-detection off delay. 0 disables.",
+              "false_detection_grace": "If the sensor stays on no longer than its occupancy timeout plus this many seconds, it saw only one brief movement, almost certainly a false detection (a fly, a heat blip). Lights that it turned on then turn off after their false-detection off delay. 0 disables.",
               "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupied, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then keeps its last known value)."
             }
           }
@@ -1635,7 +1635,7 @@
               "auto_off_transition": "Auto-off transition"
             },
             "data_description": {
-              "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
+              "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light that it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual turn-ons keep their own color.",
@@ -1730,10 +1730,10 @@
               "on_rgb_color": "Color"
             },
             "data_description": {
-              "on_brightness": "Optional. The brightness Turn on applies, also to a light that is already on. Leave blank to turn the lights on at their last brightness.",
+              "on_brightness": "Optional. The brightness that Turn on applies, also to a light that is already on. Leave blank to turn the lights on at their last brightness.",
               "on_color_mode": "Optional. Whether Turn on applies a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
-              "on_color_temp": "Optional. The white color temperature Turn on applies, for lights that support it.",
-              "on_rgb_color": "Optional. The color Turn on applies, for lights that can show it."
+              "on_color_temp": "Optional. The white color temperature that Turn on applies, for lights that support it.",
+              "on_rgb_color": "Optional. The color that Turn on applies, for lights that can show it."
             }
           },
           "turn_off": {

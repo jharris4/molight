@@ -909,7 +909,7 @@ async def test_late_matching_turn_on_naming_its_author_is_physical(
 async def test_late_matching_turn_off_naming_its_author_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry, freezer, author, physical, age
 ) -> None:
-    """The same for a member our off did not reach: their off is a manual
+    """The same for a member that our off did not reach: their off is a manual
     off of its own."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)

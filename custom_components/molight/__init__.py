@@ -111,7 +111,7 @@ async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
     removed: set[str] = hass.data.setdefault(DATA_REMOVED, set())
     # Entity ID changes whose entity has yet to report under the new one.
     pending: dict[str, str] = {}
-    # For a former entity ID another entity has taken meanwhile, the entries that
+    # For a former entity ID that another entity has taken meanwhile, the entries that
     # named it then: only they mean the entity that had it before.
     reused: dict[str, set[str]] = {}
 
@@ -372,7 +372,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unload_ok:
         if _is_virtual_light(entry) and not hass.is_stopping:
-            # Its edited settings may have ended a fight another light names.
+            # Its edited settings may have ended a fight that another light names.
             async_check_shared_members(hass)
         # A corrected entry starts clean; one still broken raises them again.
         async_clear_entry_issues(hass, entry.entry_id)

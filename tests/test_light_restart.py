@@ -1142,7 +1142,7 @@ async def _turn(hass: HomeAssistant, on: bool) -> None:
 async def test_restart_inside_window_found_off_follows_the_match_choice(
     hass: HomeAssistant, choice: str, on: bool
 ) -> None:
-    """A light found off in a window HA already handled, a manual off today,
+    """A light found off in a window that HA already handled, a manual off today,
     is turned on only when the choice matches the schedule inside its window."""
     mock_restore_cache(hass, [State(VIRTUAL, "off", {"schedule_window_start": MARKER})])
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
@@ -1191,7 +1191,8 @@ async def test_restart_outside_window_found_on_follows_the_match_choice(
 async def test_real_restart_after_a_manual_off_in_the_window(
     hass: HomeAssistant, choice: str, on: bool
 ) -> None:
-    """A manual off HA saw before it stopped is undone by Inside, kept by As found."""
+    """A manual off that HA saw before it stopped is undone by Inside, kept by As
+    found."""
     entry = await _lit_in_follow_window(hass, _match_entry(choice))
     await _turn(hass, False)
     hass.states.async_set(REAL, "off")

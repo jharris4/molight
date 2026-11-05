@@ -145,7 +145,7 @@ def test_waits_for_the_test_package(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A release no test package pins yet waits, without reading older pins."""
+    """A release that no test package pins yet waits, without reading older pins."""
     documents = _pypi(
         {"2026.9.4": FILES, "2026.10.0": FILES},
         {"0.13.368": "2026.10.0b0", "0.13.369": "2026.10.0b1", "0.13.370": None},

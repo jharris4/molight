@@ -164,7 +164,8 @@ async def test_schedule_change_rechecks_already_active_occupancy(
 
 @pytest.mark.asyncio
 async def test_schedule_end_can_force_light_off(hass: HomeAssistant) -> None:
-    """At schedule end set to Turn off turns off before leaving the inside settings."""
+    """With At schedule end set to Turn off, the light turns off before leaving the
+    inside settings."""
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
     entry = make_scheduled_light_entry(
@@ -756,7 +757,7 @@ async def test_schedule_end_into_brightness_resumes_what_the_end_would_have_run(
 async def test_schedule_end_off_ends_an_on_period_going_bright_had_cut_short(
     hass: HomeAssistant, freezer, schedule_end_action: str, resumes: bool, crossed: str
 ) -> None:
-    """A Turn off end crossed while going bright has the light off ends that
+    """A Turn off end crossed while the light is off from going bright ends that
     on-period, so going dark does not resume it under the outside settings.
     Keep state and Switch state carry it past the end."""
     illuminance = "binary_sensor.illuminance"
@@ -822,7 +823,7 @@ async def test_schedule_end_off_ends_an_on_period_going_bright_had_cut_short(
 async def test_schedule_end_switch_into_brightness_resumes_for_outside_presence(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Presence the outside settings watch gets its light back when dark."""
+    """Presence that the outside settings watch gets its light back when dark."""
     maintain = "binary_sensor.outside_maintain"
     illuminance = "binary_sensor.outside_illuminance"
     hass.states.async_set(REAL, "off")
@@ -1437,7 +1438,7 @@ async def test_schedule_change_applies_selected_illuminance_mode(
 async def test_schedule_change_bright_gate_only_sensor_lets_occupancy_hold_on_light(
     hass: HomeAssistant,
 ) -> None:
-    """A newly selected sensor in illuminance Gate only mode reading bright only
+    """A newly selected sensor in illuminance Gate only mode that reads bright only
     gates an off light, so the new settings' occupied sensor holds an on one."""
     occupancy = "binary_sensor.inside_occupancy"
     illuminance = "binary_sensor.inside_illuminance"
@@ -1766,7 +1767,7 @@ async def test_each_settings_set_applies_its_turn_on_selection(
 async def test_schedule_end_takes_over_a_turn_on_waiting_for_its_selection(
     hass: HomeAssistant, freezer, schedule_end_action: str
 ) -> None:
-    """A turn-on the inside settings have not sent yet is judged as an on light."""
+    """A turn-on that the inside settings have not sent yet is judged as an on light."""
     select = _SlowSelect(hass)
     inside_occupancy = "binary_sensor.inside_occupancy"
     hass.states.async_set("select.light_mode", "Night", {"options": ["Night"]})
@@ -3316,7 +3317,7 @@ def _visit_before_the_off(hass: HomeAssistant) -> None:
 async def test_boundary_ending_a_manual_off_stands_across_a_restart(
     hass: HomeAssistant, freezer, boundary: str, how: str
 ) -> None:
-    """A manual off a boundary ended does not come back with a restart."""
+    """A manual off that a boundary ended does not come back with a restart."""
     entry = await _manual_off_then_boundary(hass, freezer, boundary)
     cleared = boundary != "none"
     assert hass.states.get(VIRTUAL).attributes[ATTR_MANUAL_OFF_CLEARED] is cleared

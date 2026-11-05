@@ -323,8 +323,8 @@ async def test_a_combined_sensor_rejects_a_sensor_whose_source_includes_it(
 async def test_creating_a_combined_sensor_rejects_a_group_that_names_its_id(
     hass: HomeAssistant, taken: bool
 ) -> None:
-    """A new combined sensor can take an entity ID its constituent's source
-    names,
+    """A new combined sensor can take an entity ID that its constituent's
+    source names,
     including the suffixed entity ID a taken name leads to."""
     groups, _real = await _groups(hass)
     await setup_entries(hass, _occupancy(GROUP))

@@ -268,7 +268,7 @@ def test_main_needs_one_start_count_for_the_log_check(
 
 
 class _SelectionHass(runner.HomeAssistantClient):
-    """Fakes the states one turn-on selection call reads, after a previous call.
+    """Fakes the states that one turn-on selection call reads, after a previous call.
 
     The previous call left the light reporting a Cozy turn-on from the
     fixed/fallback option; an occupancy turn-on applies the selection only when
