@@ -2045,7 +2045,7 @@ NATIVE_VOCABULARIES = {
     ),
     "lutron_keypad": (["single_press"], "single_press", None, []),
     "lutron_raise_lower": (["press", "release"], "press", None, ["release"]),
-    # lutron_caseta from 2026.11: ButtonEventType, Picos report the release.
+    # lutron_caseta from 2026.11: ButtonEventType, Picos also have press_end.
     "lutron_caseta_pico": (
         ["press_start", "press_end"],
         "press_start",

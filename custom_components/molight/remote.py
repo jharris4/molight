@@ -26,9 +26,8 @@ one may fire the binding:
   - Z-Wave central scene: `KeyPressed` / `KeyPressed2x`.
   - SmartThings: `pushed` / `double`, else `pushed_2x`.
   - Lutron Caséta buttons (event entities provided by the separate
-    lutron-caseta-events integration; HA's own lutron_caseta creates
-    none): single = `press` (`release` is ignored), double = `multi_tap`
-    where the button has it.
+    lutron-caseta-events integration): single = `press` (`release` is
+    ignored), double = `multi_tap` where the button has it.
   - Home Assistant's standard button events (ButtonEventType; Lutron Caséta
     Picos and keypads from 2026.11): single = `press_start`, which also
     starts a long press. `press_end`, the long-press and the multi-press

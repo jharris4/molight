@@ -58,8 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Home Assistant 2026.11**: changing a MoLight entity's ID made the entity
-  disappear.
+- **Home Assistant 2026.11**: an entity ID change made one of MoLight's own
+  entities disappear.
 
 ## [1.9.0] - 2026-10-06
 
