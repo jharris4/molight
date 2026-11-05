@@ -230,7 +230,7 @@ async def test_member_turn_on_mirrors_color(hass: HomeAssistant) -> None:
 async def test_physical_recolor_mirrors_and_restarts_timer(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Recoloring a real light is human activity: the color is mirrored,
+    """Recoloring a real light is a person's change: the color is mirrored,
     attributed, and a running timer restarts with the full timeout."""
     member_attrs = {
         **HS_CAPS,
@@ -390,7 +390,7 @@ async def test_warn_color_shown_and_restored_on_retrigger(
     data = _real_on_calls(calls)[-1]["service_data"]
     assert tuple(data["rgb_color"]) == (255, 0, 0)
     assert data["brightness"] == 200  # no warn_brightness → pre-warn value
-    # Reported color follows the stage; the snapshot remembers the original.
+    # Reported color follows the stage; the pre-warning look keeps the original.
     assert tuple(attrs["hs_color"]) == (0.0, 100.0)
     assert attrs["pre_warn_color"] == {"hs_color": [100.0, 100.0]}
 
@@ -639,11 +639,9 @@ async def test_member_color_temp_mirrored(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_pre_warning_snapshot_keeps_color_temp(
-    hass: HomeAssistant, freezer
-) -> None:
-    """A color-temperature light entering the warning snapshots its kelvin, and a
-    re-trigger with no color of its own restores it."""
+async def test_pre_warning_look_keeps_color_temp(hass: HomeAssistant, freezer) -> None:
+    """A color-temperature light entering the warning saves its kelvin as the
+    pre-warning look, and a re-trigger with no color of its own restores it."""
     hass.states.async_set(REAL, "off", HS_COLOR_TEMP_CAPS)
     await setup_entries(
         hass, make_light_entry(warn_timeout=15, warn_rgb_color=[255, 0, 0])
@@ -911,7 +909,7 @@ async def test_reported_standby_color_temp_stays_in_the_offered_range(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("kelvin", "reported"), KELVINS)
-async def test_pre_warning_snapshot_keeps_the_reported_color_temp(
+async def test_pre_warning_look_keeps_the_reported_color_temp(
     hass: HomeAssistant, freezer, kelvin: int, reported: int
 ) -> None:
     """The warning remembers, and a re-trigger restores, the kelvin the light

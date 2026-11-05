@@ -774,7 +774,7 @@ def _switch_entry() -> MockConfigEntry:
 
 
 async def _lit_before_switch_end(hass: HomeAssistant, entry) -> _Members:
-    """Lit inside the window; the outside settings' room emptied an hour ago."""
+    """Lit inside the window; the outside settings' occupancy cleared an hour ago."""
     left = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
     hass.states.async_set(OCC, "off", {"latest_occupied_time": left})
     return await _lit_in_window(hass, entry, [REAL])
@@ -835,7 +835,7 @@ async def test_new_on_period_replaces_an_owed_switch_end(hass: HomeAssistant) ->
 
 
 # ---------------------------------------------------------------------------
-# A pre-warning snapshot
+# The pre-warning look
 # ---------------------------------------------------------------------------
 
 WARN = 51  # 20 %
@@ -924,10 +924,10 @@ async def test_warning_restart_with_the_member_off_stays_off(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("boot", UNKNOWN)
 @pytest.mark.parametrize("color", [False, True], ids=["brightness", "color"])
-async def test_pre_warning_snapshot_is_owed_to_a_member_that_loads_late(
+async def test_pre_warning_look_is_owed_to_a_member_that_loads_late(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, boot: str, color: bool
 ) -> None:
-    """An unreadable member keeps the snapshot until it reports lit."""
+    """An unreadable member is owed the pre-warning look until it reports lit."""
     _, real, calls = await _restart_mid_warn(hass, freezer, {REAL: boot}, color=color)
     assert _turn_ons(calls) == []
     assert _state(hass).state == "off"
@@ -945,7 +945,7 @@ async def test_pre_warning_snapshot_is_owed_to_a_member_that_loads_late(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("boot", UNKNOWN)
-async def test_pre_warning_snapshot_is_dropped_when_the_unreadable_member_is_off(
+async def test_pre_warning_look_is_dropped_when_the_unreadable_member_is_off(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, boot: str
 ) -> None:
     """An unreadable member reporting off completes the automatic turn-off like any
@@ -1064,10 +1064,10 @@ async def test_virtual_turn_on_while_a_member_is_unreadable_sets_what_it_is_sent
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("how", ["restart", "crash"])
-async def test_owed_pre_warning_snapshot_survives_a_second_restart(
+async def test_owed_pre_warning_look_survives_a_second_restart(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, how: str
 ) -> None:
-    """The snapshot is still restored when HA restarts again before the
+    """The pre-warning look is still restored when HA restarts again before the
     unreadable member reports."""
     entry, real, _ = await _restart_mid_warn(hass, freezer, {REAL: "placeholder"})
     assert _attrs(hass)["warning_active"] is True

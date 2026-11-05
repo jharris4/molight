@@ -245,7 +245,7 @@ async def test_standby_below_one_percent_is_no_standby(hass: HomeAssistant) -> N
 async def test_occupancy_raises_standby_and_the_timer_returns_to_it(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Motion raises the light to auto-on; vacancy drops it back, not off."""
+    """Motion raises the light to auto-on; clearing drops it back, not off."""
     calls = await _setup_porch(
         hass, _porch(inside={CONF_AUTO_ON_TRANSITION: 2, CONF_AUTO_OFF_TRANSITION: 3})
     )
@@ -963,7 +963,7 @@ async def test_false_detection_does_not_cut_short_a_physically_changed_raise(
     hass: HomeAssistant, freezer, change: str
 ) -> None:
     """Dimming or recoloring a light that occupancy raised from standby makes
-    the raise the user's: a false detection no longer drops it back after the
+    the raise the person's: a false detection no longer drops it back after the
     false-detection off delay."""
     visit = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
     await _setup_porch(hass, _porch())
@@ -1733,7 +1733,7 @@ async def test_schedule_end_switch_recalculates_a_standby_still_waiting(
 
 @pytest.mark.asyncio
 async def test_held_schedule_end_off_waits_for_the_hold(hass: HomeAssistant) -> None:
-    """A pending Turn off end leaves standby lit and applies the off on release."""
+    """A pending schedule end off leaves standby lit and applies the off on release."""
     await _setup_porch(hass, _porch())
     await hass.services.async_call("switch", "turn_off", {"entity_id": AUTO_OFF_SWITCH})
     await settle(hass)

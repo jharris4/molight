@@ -276,7 +276,7 @@ async def _assert_resumed_for(hass: HomeAssistant, freezer, seconds: int) -> Non
 async def test_dark_edge_does_not_turn_on_after_manual_off(
     hass: HomeAssistant, freezer, mode: str, off_via: str
 ) -> None:
-    """Going dark resumes no on-period that the user ended."""
+    """Going dark resumes no on-period that the person ended."""
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(REAL, "off")
     await setup_entries(
@@ -403,7 +403,7 @@ async def test_dark_edge_resumes_after_bright_off_at_hold_release(
 async def test_dark_edge_resume_is_anchored_to_latest_occupied_time(
     hass: HomeAssistant, freezer
 ) -> None:
-    """With a latest_occupied_time the resumed time runs from when the room emptied."""
+    """With a latest_occupied_time the resumed time runs from it."""
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(OCC, "off")
     await setup_entries(hass, make_light_entry(occupancy=OCC, illuminance=ILLUM))
@@ -489,9 +489,9 @@ async def test_dark_edge_after_a_manual_off_while_bright_resumes_nothing(
 async def test_gate_window_end_while_bright_off_ends_the_on_period(
     hass: HomeAssistant, freezer, mode: str, ends: bool
 ) -> None:
-    """A Gate and turn off end ends an on-period that going bright cut short, so a
-    later dark edge does not light an empty room; Switch and Keep state carry
-    it past the end."""
+    """A Gate and turn off schedule end ends an on-period that going bright cut
+    short, so a later dark edge does not light an empty room; Switch and Keep
+    state carry it past the end."""
     hass.states.async_set(ILLUM, "off")
     hass.states.async_set(SCHED, "on")
     hass.states.async_set(OCC, "off")
@@ -818,7 +818,7 @@ async def test_dark_edge_resumes_a_maintain_occupancy_sensors_timer(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("sensor", ["occupancy", "maintain"])
 @pytest.mark.parametrize("away", [10, 100], ids=["just_left", "long_gone"])
-async def test_dark_edge_after_the_room_emptied_while_bright(
+async def test_dark_edge_after_occupancy_cleared_while_bright(
     hass: HomeAssistant, freezer, sensor: str, away: int
 ) -> None:
     """Presence held the light with no timer: when they left decides."""
@@ -1719,7 +1719,7 @@ async def test_forced_off_beats_occupancy_with_all_three_configured(
 async def test_virtual_turn_on_not_gated_by_bright_illuminance(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The user can turn the light on while its illuminance sensor is bright."""
+    """A person can turn the light on while its illuminance sensor is bright."""
     entry = make_light_entry(illuminance=ILLUM)
     hass.states.async_set(ILLUM, "on")
     await _assert_virtual_turn_on_runs_timer(hass, freezer, entry)
@@ -1730,7 +1730,7 @@ async def test_virtual_turn_on_not_gated_by_bright_illuminance(
 async def test_virtual_turn_on_not_gated_outside_schedule(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The user can turn a regular Virtual Light on outside its gate schedule."""
+    """A person can turn a regular Virtual Light on outside its gate schedule."""
     entry = make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE)
     hass.states.async_set(SCHED, "off")
     await _assert_virtual_turn_on_runs_timer(hass, freezer, entry)
@@ -1862,7 +1862,7 @@ async def test_occupancy_adopts_manual_light(hass: HomeAssistant, freezer) -> No
 async def test_false_detection_clear_keeps_the_timer_of_the_users_turn_on(
     hass: HomeAssistant, freezer, turn_on: str, hold: str
 ) -> None:
-    """A false detection must not time the user's light from an earlier visit."""
+    """A false detection must not time the person's light from an earlier visit."""
     old = (datetime.now(UTC) - timedelta(seconds=120)).isoformat()
     holder = OCC if hold == "occupancy" else MAINT
     hass.states.async_set(REAL, "off")
@@ -1892,7 +1892,7 @@ async def test_false_detection_clear_keeps_the_timer_of_the_users_turn_on(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
-    # The user's 60 s timer from T0 still stands.
+    # The person's 60 s timer from T0 still stands.
     freezer.tick(timedelta(seconds=28))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -1949,7 +1949,7 @@ async def test_false_detection_clear_leaves_a_physically_changed_light_its_timer
     hass: HomeAssistant, freezer, change: str, hold: str
 ) -> None:
     """A physical dim, recolor or turn-on while motion has the light on
-    makes the on-period the user's, as the same change through this entity."""
+    makes the on-period the person's, as the same change through this entity."""
     old = (datetime.now(UTC) - timedelta(seconds=120)).isoformat()
     attrs = {"brightness": 100, "hs_color": (10.0, 50.0)}
     contexts = []
@@ -2400,7 +2400,7 @@ async def test_timer_falls_back_when_lot_unparsable(
 async def test_attribute_only_change_does_not_restart_timer(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A non-brightness attribute update (battery, ...) is not human activity."""
+    """A non-brightness attribute update (battery, ...) is not a person's change."""
     await setup_entries(hass, make_light_entry())
 
     hass.states.async_set(REAL, "on", {"brightness": 100})
@@ -2485,7 +2485,7 @@ async def test_member_on_at_brightness_zero_keeps_running_timer(
     hass: HomeAssistant, freezer
 ) -> None:
     """A member appearing on at brightness 0 while another is lit must not
-    restart the running timer; it carries no human activity."""
+    restart the running timer; it is not a person's change."""
     hass.states.async_set(REAL, "on", {"brightness": 100})
     await setup_entries(hass, make_light_entry(lights=[REAL, REAL2]))
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE

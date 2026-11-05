@@ -424,7 +424,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unload_ok:
         if _is_virtual_light(entry) and not hass.is_stopping:
-            # Its edited settings may have ended a fight that another light names.
+            # Its edits may have dropped a shared light named in another light's issue.
             async_check_shared_members(hass)
         # A corrected entry starts clean; one still broken raises them again.
         async_clear_entry_issues(hass, entry.entry_id)

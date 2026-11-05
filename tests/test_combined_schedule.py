@@ -327,7 +327,7 @@ async def test_all_is_on_only_where_inputs_overlap(
 
 
 @pytest.mark.asyncio
-async def test_inverted_combination(hass: HomeAssistant, freezer) -> None:
+async def test_inverted_combined_schedule(hass: HomeAssistant, freezer) -> None:
     """Invert output turns the gaps between inputs into the schedule periods."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 19:00:00+00:00")
@@ -463,10 +463,10 @@ async def test_input_registry_edit_does_not_rebuild(
     assert hass.states.get("binary_sensor.bedside").state == "on"
 
 
-def _input_and_combination(
+def _input_and_combined_schedules(
     definition: str, nested: bool
 ) -> tuple[MockConfigEntry, list[MockConfigEntry]]:
-    """Return Morning and the combinations over it, Bedside last."""
+    """Return Morning and the combined schedules over it, Bedside last."""
     morning = (
         _time_schedule("Morning", "06:00", "08:00")
         if definition == "time"
@@ -500,7 +500,7 @@ async def _assert_bedside_follows_morning(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("nested", [False, True], ids=["direct", "nested"])
 @pytest.mark.parametrize("definition", ["time", "source"])
-async def test_input_created_again_rebuilds_the_combination(
+async def test_input_created_again_rebuilds_the_combined_schedule(
     hass: HomeAssistant, freezer, definition: str, nested: bool
 ) -> None:
     """An input whose entity was deleted from the registry while its entry was
@@ -508,8 +508,8 @@ async def test_input_created_again_rebuilds_the_combination(
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 07:00:00+00:00")
     hass.states.async_set("binary_sensor.door", "on")
-    morning, combinations = _input_and_combination(definition, nested)
-    await _setup(hass, morning, *combinations)
+    morning, combined = _input_and_combined_schedules(definition, nested)
+    await _setup(hass, morning, *combined)
     assert hass.states.get("binary_sensor.bedside").state == "on"
 
     await hass.config_entries.async_set_disabled_by(
@@ -530,7 +530,7 @@ async def test_input_created_again_rebuilds_the_combination(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("nested", [False, True], ids=["direct", "nested"])
 @pytest.mark.parametrize("definition", ["time", "source"])
-async def test_combination_set_up_before_its_input_picks_it_up(
+async def test_combined_schedule_set_up_before_its_input_picks_it_up(
     hass: HomeAssistant, freezer, definition: str, nested: bool
 ) -> None:
     """A combination that starts before its input has a registry entry counts
@@ -538,8 +538,8 @@ async def test_combination_set_up_before_its_input_picks_it_up(
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 07:00:00+00:00")
     hass.states.async_set("binary_sensor.door", "on")
-    morning, combinations = _input_and_combination(definition, nested)
-    await _setup(hass, *reversed(combinations))
+    morning, combined = _input_and_combined_schedules(definition, nested)
+    await _setup(hass, *reversed(combined))
     assert hass.states.get("binary_sensor.bedside").state == "unavailable"
 
     writes = _record_states(hass, "binary_sensor.bedside")
@@ -1057,7 +1057,7 @@ async def test_startup_holds_restored_state_until_inputs_report(
 
 
 @pytest.mark.asyncio
-async def test_editing_an_input_rebuilds_the_combination(
+async def test_editing_an_input_rebuilds_the_combined_schedule(
     hass: HomeAssistant, freezer
 ) -> None:
     """Inputs come from entry settings, so editing one must reach the combination."""
@@ -1206,7 +1206,9 @@ async def test_follow_light_turns_on_for_each_window(
 
 
 @pytest.mark.asyncio
-async def test_inverted_empty_combination_is_off(hass: HomeAssistant, freezer) -> None:
+async def test_inverted_empty_combined_schedule_is_off(
+    hass: HomeAssistant, freezer
+) -> None:
     """With no inputs there is nothing to invert, so it stays off."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 12:00:00+00:00")
@@ -1222,7 +1224,7 @@ async def test_inverted_empty_combination_is_off(hass: HomeAssistant, freezer) -
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("depth", [1, 2])
-async def test_inverting_an_empty_combination_is_off(
+async def test_inverting_an_empty_combined_schedule_is_off(
     hass: HomeAssistant, freezer, depth: int
 ) -> None:
     """An input with no schedules left counts as deleted, however deep it sits."""
@@ -1242,7 +1244,7 @@ async def test_inverting_an_empty_combination_is_off(
 
 
 @pytest.mark.asyncio
-async def test_emptying_an_inner_combination_does_not_turn_its_inverse_on(
+async def test_emptying_an_inner_combined_schedule_does_not_turn_its_inverse_on(
     hass: HomeAssistant, freezer
 ) -> None:
     """A porch on "Dark" = not "Daylight" stays off when Daylight's schedules go."""
@@ -1294,7 +1296,7 @@ async def test_emptying_an_inner_combination_does_not_turn_its_inverse_on(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("invert", [False, True], ids=["plain", "inverted"])
 @pytest.mark.parametrize("operator", [SCHEDULE_OPERATOR_ANY, SCHEDULE_OPERATOR_ALL])
-async def test_deleting_every_input_leaves_the_combination_off(
+async def test_deleting_every_input_leaves_the_combined_schedule_off(
     hass: HomeAssistant, freezer, operator: str, invert: bool
 ) -> None:
     """A follow-mode porch on "Not Day" does not come on for good when Day goes."""
@@ -1336,7 +1338,7 @@ async def test_deleting_every_input_leaves_the_combination_off(
 
 
 @pytest.mark.asyncio
-async def test_deleting_one_input_of_an_all_combination_widens_it(
+async def test_deleting_one_input_of_an_all_combined_schedule_widens_it(
     hass: HomeAssistant, freezer
 ) -> None:
     """Evening AND Workday without Workday is every evening, weekends included."""
@@ -1500,7 +1502,7 @@ async def test_dst_fold_edges_fire_once_at_their_first_occurrence(
 
 
 @pytest.mark.asyncio
-async def test_editing_a_nested_input_rebuilds_the_outer_combination(
+async def test_editing_a_nested_input_rebuilds_the_outer_combined_schedule(
     hass: HomeAssistant, freezer
 ) -> None:
     """An edit two levels down reaches the outer combination."""
@@ -1600,7 +1602,7 @@ async def test_sun_input_past_its_fixed_end_adds_no_window(
         ({"sun": "sunrise"}, {"sun": "sunset"}, "2026-06-21 12:00", "off"),
     ],
 )
-async def test_windows_on_days_around_a_polar_period_in_a_combination(
+async def test_windows_on_days_around_a_polar_period_in_a_combined_schedule(
     hass: HomeAssistant, freezer, start: str | dict, end: dict, when: str, expected: str
 ) -> None:
     """A time-window input keeps the nights next to a polar period."""
@@ -1684,7 +1686,7 @@ async def test_input_pairs_a_fixed_time_with_the_same_days_sun_event_in_samoa(
             "binary_sensor.day",
         ),
     ],
-    ids=["inverted combination", "combination of an inverted schedule"],
+    ids=["inverted combined schedule", "combined schedule of an inverted schedule"],
 )
 async def test_inverted_sun_window_keeps_one_marker_through_the_midnight_sun(
     hass: HomeAssistant, freezer, combined: MockConfigEntry, entity_id: str
@@ -2294,7 +2296,7 @@ async def test_changes_arriving_together_that_leave_no_gap_keep_the_window(
     ],
 )
 @pytest.mark.asyncio
-async def test_combination_back_from_an_unload_knows_the_window_started_meanwhile(
+async def test_combined_schedule_back_from_an_unload_knows_the_window_started_meanwhile(
     hass: HomeAssistant,
     freezer,
     how: str,
@@ -2417,7 +2419,7 @@ async def test_an_off_between_two_sources_survives_later_changes_of_one(
 
 
 @pytest.mark.asyncio
-async def test_an_unloaded_combination_keeps_only_the_latest_states(
+async def test_an_unloaded_combined_schedule_keeps_only_the_latest_states(
     hass: HomeAssistant, freezer
 ) -> None:
     """A source that keeps changing while the combination is unloaded is

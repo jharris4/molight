@@ -50,7 +50,7 @@ Off warning sequence
   of their own (occupancy/maintain/door, a virtual turn-on without an explicit
   brightness, a gate lifting, auto-off becoming held) restore the pre-warning
   brightness so the warning is transparent; a physical turn-on or a physical
-  dim brings its own brightness, which is honored instead of the snapshot.
+  dim brings its own brightness, which is honored instead of the pre-warning look.
   Bright-forces-off (control mode) and a follow or Gate and turn off window end
   still turn the lights off during the sequence, as they would while the timer runs.
   Each stage can also show an optional color, either a color temperature
@@ -63,8 +63,8 @@ Off warning sequence
   / pre_warn_color attributes (null outside the sequence) and survive
   restarts: a restart landing mid-warning with the lights still on restores
   them instead of mirroring the stage's; lights found off stay off (the
-  automatic turn-off completed), and unreadable members keep the snapshot until they
-  report.
+  automatic turn-off completed), and unreadable members keep the pre-warning look
+  until they report.
 
   any + physical turn-off
        → IDLE
@@ -107,7 +107,7 @@ Turn-on attribution
                          physical change (a wall switch, another automation, the HA
                          UI acting on the real entity), whether this virtual
                          light was off or already on.
-    last_on_virtual:     the user toggled this virtual light entity ON via the HA UI
+    last_on_virtual:     the person toggled this virtual light entity ON via the HA UI
                          (async_turn_on was called directly).
     last_on_occupancy:   occupancy sensor turned the lights on.
     last_on_illuminance: going dark turned the lights on.
@@ -123,7 +123,7 @@ Turn-on attribution
   last_brightness_change_virtual records brightness set through this entity.
   Color changes are tracked identically via last_color_change_physical /
   last_color_change_virtual, and a physical recolor restarts a running timer
-  exactly like a physical dim, since both are human activity.
+  exactly like a physical dim, since both are a person's change.
 
 Color support
   The virtual light derives its color capabilities from the real lights: it
@@ -180,7 +180,7 @@ illuminance_mode:
     timer would have finished, or a timeout from the forced off for a light that
     presence was holding (whoever held it was there until then at least); an
     off warning sequence or standby leaves none. An on-period ended any other
-    way (manual off, timer, schedule) is never resumed, nor is one that the user
+    way (manual off, timer, schedule) is never resumed, nor is one that the person
     turned off, or whose gate window ended, while going bright had it off.
   - Illuminance OFF→ON (dark→bright):
       Control:    go IDLE, turn lights off.
@@ -504,7 +504,7 @@ def _wrapped_light_acted_by_itself(old_state: State | None, new_state: State) ->
 
     Its timer, stages, sensors, schedule and standby move none of the timestamps
     a person's change would, so a report that leaves them all as they were
-    is not human activity at this level.
+    is not a person's change at this level.
     """
     if old_state is None or "molight_state" not in new_state.attributes:
         return False
@@ -589,7 +589,7 @@ async def async_setup_entry(
 # A member report is our echo only if it is consistent with what we asked for,
 # allowing for power-first bulbs, fade steps, quantized replies, or
 # another color mode while the command settles, and for slow bulbs whose full
-# reply arrives much later; a contradiction is human activity at any age.
+# reply arrives much later; a contradiction is a person's change at any age.
 # Context alone cannot tell: Home Assistant reuses our service-call context on
 # a member for 5 s, and a slow bulb's genuine reply arrives under its own.
 TURN_ON_SELECT_TIMEOUT = 10.0  # seconds a turn-on waits for its select call
@@ -1069,7 +1069,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         # The (select entity, reason) last warned about, so repeats log at debug.
         self._selection_warned: tuple[str, str] | None = None
         # True while the current on-period was started by occupancy (not by
-        # the user), the only case where a false-detection clear may cut the
+        # the person), the only case where a false-detection clear may cut the
         # lights short.
         self._occupancy_lit_lights: bool = False
 
@@ -1082,7 +1082,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         # Each member's own look then, None for one that was off; a member
         # that could not be read gets the light's.
         self._pre_warn_members: dict[str, _Look | None] = {}
-        # Restored in its own right: the snapshots above are legitimately
+        # Restored in its own right: the pre-warning looks above are legitimately
         # null for members reporting no brightness or color.
         self._warning_active: bool = False
         self._effect_sent_color: bool = False
@@ -1108,7 +1108,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         # it must not replay the bright/dark edge actions.
         self._illuminance_last_bright: bool | None = None
         # Last known occupied/clear, None until first seen; a recovery
-        # matching it must not turn a light that the user turned off on again.
+        # matching it must not turn a light that the person turned off on again.
         self._occupancy_last_on: bool | None = None
         # When its visit was first seen; its reload moves last_changed.
         self._occupancy_on_since: datetime | None = None
@@ -2275,7 +2275,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
         The stored schedule window marker distinguishes a boundary missed while HA was
         down (apply it now) from one we already handled before the restart
-        (leave the lights alone; if they're off, the user turned them off).
+        (leave the lights alone; if they're off, the person turned them off).
         """
         if not self._schedule_sensor or self._schedule_mode != SCHEDULE_MODE_FOLLOW:
             return False
@@ -2410,7 +2410,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self._early_command = True
         now = datetime.now(UTC)
         self._last_on_virtual = now
-        self._occupancy_lit_lights = False  # the user owns this on-period now
+        self._occupancy_lit_lights = False  # the person owns this on-period now
         brightness = kwargs.get(ATTR_BRIGHTNESS)
         # HA has already narrowed any color request to the modes we offer,
         # so only the canonical hs/color-temperature attributes can arrive here.
@@ -2525,7 +2525,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 return
             self._watch_grouped_lights()
             if _group_members(old_state) != _group_members(new_state):
-                # Which lights this one commands changed, and with it the fights.
+                # Which lights this one controls changed, and so may the shared lights.
                 async_check_shared_members(self.hass)
         if entity_id in self._lights:
             group_by_itself = _is_group(new_state) and self._group_acted_by_itself(
@@ -2607,7 +2607,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 event.context.id in self._waiting_turn_ons
                 or self._selecting_on_device_of(entity_id, event.context)
             )
-            human = not (
+            by_person = not (
                 group_by_itself or _wrapped_light_acted_by_itself(old_state, new_state)
             )
             if not claim and lit and self._turn_on_waiting():
@@ -2629,7 +2629,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                         old_state,
                         new_state,
                         claim=claim,
-                        human=human,
+                        by_person=by_person,
                         retrigger=commanded,
                     )
                 elif commanded and self._in_warning() and self._all_lights_off():
@@ -2653,14 +2653,14 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             ):
                 # A member recovering (first sighting, or recovery from
                 # unavailable) while the virtual light is already on, or is
-                # about to be, is not human activity: mirror its
+                # about to be, is not a person's change: mirror its
                 # brightness/color but leave the running timer or
                 # off warning sequence untouched; a bulb that briefly drops off the mesh
                 # with a timer running must not win itself a fresh timer.
                 self._mirror_member(new_state)
                 return
             if (
-                not human
+                not by_person
                 and lit
                 and (self._machine_state != STATE_IDLE or self._turn_on_waiting())
             ):
@@ -2678,11 +2678,11 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 new_state.attributes.get("brightness"),
                 color=color,
                 # A member reporting in was not turned off.
-                manual=human and not member_recovered,
-                claim=claim and human,
+                manual=by_person and not member_recovered,
+                claim=claim and by_person,
                 touched=entity_id,
                 send_turned_on=claim,
-                human=human,
+                by_person=by_person,
             )
             return
         if same_state:
@@ -2998,7 +2998,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         claim: bool = True,
         touched: str | None = None,
         send_turned_on: bool = True,
-        human: bool = True,
+        by_person: bool = True,
     ) -> None:
         """Handle a real light being turned on/off physically.
 
@@ -3006,10 +3006,10 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         claim is False for a turn-on that our own select call caused. touched is
         the real light that changed. send_turned_on is False when no person
         or other automation is known to have turned it on: our own select
-        call, or a member left on after a failed command. human is False for
+        call, or a member left on after a failed command. by_person is False for
         a wrapped virtual light acting by itself, which the event says.
         """
-        reason = REASON_PHYSICAL if human else REASON_WRAPPED
+        reason = REASON_PHYSICAL if by_person else REASON_WRAPPED
         if state == "on" and brightness == 0:
             # "On" at brightness 0 counts as off, matching the dimming
             # path, _all_lights_off and the startup seed. A later 0 → non-zero
@@ -3023,7 +3023,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             # later dims (which _on_light_attrs_change handles).
             if brightness:
                 self._attr_brightness = brightness
-            if self._occupancy_wait_unsub is not None and claim and human:
+            if self._occupancy_wait_unsub is not None and claim and by_person:
                 if self._occupancy_wait_generation is None:
                     if self._machine_state == STATE_IDLE:
                         self._on_own_system_turn_on(brightness, color)
@@ -3061,15 +3061,15 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         new_state: State,
         *,
         claim: bool = True,
-        human: bool = True,
+        by_person: bool = True,
         retrigger: bool = False,
     ) -> None:
         """Handle a physical brightness/color change on an on real light.
 
-        Dimming or recoloring is human activity: record it and restart any
+        Dimming or recoloring is a person's change: record it and restart any
         running timer with the full timeout. Brightness 0 counts as off. claim
         is False for a change that our own select call caused;
-        human is False for a wrapped virtual light's own stage or standby,
+        by_person is False for a wrapped virtual light's own stage or standby,
         which is shown but not acted on. retrigger is a person's turn-on of
         a wrapped virtual light that was on, which changes neither.
         """
@@ -3088,11 +3088,11 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         if retrigger:
             self._last_on_physical = now
         if color_changed:
-            if human:
+            if by_person:
                 self._last_color_change_physical = now
             self._set_color_state(*new_color)
         if brightness_changed:
-            if human:
+            if by_person:
                 self._last_brightness_change_physical = now
             if new_b:
                 self._attr_brightness = new_b
@@ -3100,8 +3100,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             if new_b == 0:
                 if self._all_lights_off():
                     self._go_idle(
-                        manual=human,
-                        reason=REASON_PHYSICAL if human else REASON_WRAPPED,
+                        manual=by_person,
+                        reason=REASON_PHYSICAL if by_person else REASON_WRAPPED,
                     )
                     return
                 if self._in_warning():
@@ -3121,14 +3121,14 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     "on",
                     new_b,
                     color=new_color,
-                    claim=claim and human,
+                    claim=claim and by_person,
                     send_turned_on=claim,
-                    human=human,
+                    by_person=by_person,
                 )
             self.async_write_ha_state()
             return
 
-        if not human:
+        if not by_person:
             self.async_write_ha_state()
             return
         if claim:
@@ -3193,7 +3193,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         self.async_write_ha_state()
 
     def _claim_on_period(self) -> None:
-        """Make the on-period the user's after a physical change.
+        """Make the on-period the person's after a physical change.
 
         As a change made through this entity does: a false detection no
         longer cuts it short, a manual off's standby suppression ends, and a
@@ -3468,7 +3468,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         plain = expectation.brightness is None and expectation.color is None
         for entity_id in self._lights if members is None else members:
             # A member already there has nothing to report, and the unanswered
-            # expectation would pass a later human change off as its echo.
+            # expectation would pass a later person's change off as its echo.
             if plain and self._member_is_lit(entity_id) is on:
                 continue
             self._echo_expectations.setdefault(
@@ -3534,7 +3534,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     def _turn_on_waiting(self, *, virtual: bool = False) -> bool:
         """Return True while a turn-on that nothing overtook waits for its selection.
 
-        With virtual, only one that the user made through this entity counts.
+        With virtual, only one that the person made through this entity counts.
         """
         return any(
             not self._overtaken(waiting)
@@ -4062,7 +4062,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         """Make a member back from unavailable match a follow schedule.
 
         A rebooted (or reloaded) member reports whatever it booted into, which
-        is not human activity: the schedule decides on/off and its settings
+        is not a person's change: the schedule decides on/off and its settings
         are re-sent. Returns False when there is no valid follow schedule to
         follow, or a hold would suppress the off. A light at standby
         is re-sent its standby settings the same way.
@@ -4418,17 +4418,17 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         )
 
     def _after_manual_off(self, since: datetime) -> datetime:
-        """Push a deferred start's schedule window past the user's last turn-off.
+        """Push a deferred start's schedule window past the person's last turn-off.
 
         A start that a gate or an unreadable sensor blocked is only applied
-        on recovery when the user has not turned the light off since.
+        on recovery when the person has not turned the light off since.
         """
         if self._last_off_manual is not None and self._last_off_manual > since:
             return self._last_off_manual
         return since
 
     def _gate_lifted_since(self, since: datetime) -> bool:
-        """Return True when a turn-on gate opened at or after `since`.
+        """Return True when a turn-on gate lifted at or after `since`.
 
         Illuminance going dark or losing its reading, a gate-mode window
         starting, or a Virtual Scheduled Light switching settings each re-read
@@ -4460,7 +4460,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         Used when illuminance goes dark or a gate-mode window starts while
         the lights are already on (ACTIVE/COUNTDOWN/EFFECT/WARN) with a
         presence hold. Not a turn-on: attribution and the occupancy-lit
-        flag are left untouched, so the user still owns a manual on-period.
+        flag are left untouched, so the person still owns a manual on-period.
         A light at standby is raised to the auto-on brightness, which
         occupancy then owns like any raise from standby.
         """
@@ -4774,7 +4774,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         """Seconds to wait once the last presence hold clears.
 
         A false detection leaves latest_occupied_time at an earlier visit,
-        which must not cut short a light the user turned on since then: the
+        which must not cut short a light the person turned on since then: the
         timer never finishes before a full timeout after the latest manual or
         door turn-on, a physical dim or recolor (which also
         restarts a running timer), or any fresh timer started since,
@@ -4842,7 +4842,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         nobody made it (a select call's preset lit the real lights).
         """
         # A manual turn-on cancels any off warning sequence; the caller
-        # has already set the real lights, so just drop the pre-warning snapshot.
+        # has already set the real lights, so just drop the pre-warning look.
         self._cancel_warning(self._attr_brightness, self._current_color())
         self._clear_bright_forced_off()
         if rejoin:
@@ -5006,7 +5006,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         return self._machine_state in (STATE_EFFECT, STATE_WARN)
 
     def _forget_warning(self) -> None:
-        """Clear warning_active and drop the pre-warning snapshot."""
+        """Clear warning_active and drop the pre-warning look."""
         self._warning_active = False
         self._pre_warn_brightness = None
         self._pre_warn_color = None
@@ -5088,7 +5088,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         own_color: bool = True,
         lit_only: bool = True,
     ) -> dict[str, _Look | None]:
-        """Per-member looks from the pre-warning snapshot, for _set_lights.
+        """Each member's pre-warning look, for _set_lights.
 
         A given brightness or color replaces each member's own (a color only
         with own_color). A member that was off is left out, or without
@@ -5108,9 +5108,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     def _begin_warning(self) -> None:
         """Automatic turn-off is due: start the off warning sequence.
 
-        Snapshots the current brightness and color (restored if the user
-        re-triggers or reused by a warn stage with no brightness/color of its
-        own). Falls through to the warn stage (and to a plain off) when the
+        Saves the brightness and color as the pre-warning look (restored if a
+        person re-triggers or reused by a warn stage with no brightness/color
+        of its own). Falls through to the warn stage (and to a plain off) when the
         earlier stage is disabled, so both durations at 0 behaves exactly like
         an immediate off.
         """
@@ -5423,8 +5423,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
         Only an off, a newer virtual turn-on or a physical change overtakes
         a turn-on waiting for its selection. A stage that the timer
-        reaches meanwhile is replaced by a virtual turn-on, as the user's command
-        lights the room with the user's settings; an automatic turn-on, or a
+        reaches meanwhile is replaced by a virtual turn-on, as the person's command
+        lights the room with the person's settings; an automatic turn-on, or a
         re-send, sends that stage instead of the look it was issued with. An
         automatic turn-on issued while a virtual one waits is dropped. An
         automatic turn-on at the auto-on or standby brightness (auto_brightness) also
@@ -5443,7 +5443,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self._clear_bright_forced_off()
             self._close_owed_ends()
             if color and self._owed is not None and self._owed.look is not None:
-                # Unreadable members owe the color named last, not the snapshot's.
+                # Unreadable members owe the color named last, not the look's.
                 self._owed.look = (self._owed.look[0], color)
             if (
                 self._owed is not None
@@ -5462,7 +5462,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         auto_brightness_generation = self._auto_brightness_generation
         if on and apply_turn_on_selection and (was_off or force_selection):
             if not virtual and self._turn_on_waiting(virtual=True):
-                self._occupancy_lit_lights = False  # the user's on-period
+                self._occupancy_lit_lights = False  # the person's on-period
                 return False
             waiting = _WaitingTurnOn(
                 generation,

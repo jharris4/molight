@@ -961,7 +961,7 @@ async def test_restart_during_effect_blink_off_seeds_idle(
 ) -> None:
     """A restart during the effect blink-off finds the real lights off and
     seeds IDLE: the automatic turn-off effectively completed early; the restored
-    pre-warning snapshot must not turn the light on again."""
+    pre-warning look must not turn the light on again."""
     mock_restore_cache(
         hass,
         [
@@ -1033,7 +1033,7 @@ async def test_restart_during_warn_restores_pre_warn_brightness(
 
 
 @pytest.mark.asyncio
-async def test_restart_during_warn_without_snapshot_keeps_warn_brightness(
+async def test_restart_during_warn_without_a_pre_warning_look_keeps_warn_brightness(
     hass: HomeAssistant,
 ) -> None:
     """A restore from before pre_warn_brightness existed (attribute absent)
@@ -1050,12 +1050,12 @@ async def test_restart_during_warn_without_snapshot_keeps_warn_brightness(
 
 
 @pytest.mark.asyncio
-async def test_restart_while_a_turn_on_ending_the_warning_waits_uses_the_snapshot(
+async def test_restart_while_a_warning_ending_turn_on_waits_uses_the_pre_warning_look(
     hass: HomeAssistant,
 ) -> None:
     """A state saved while a turn-on that ends the warning still waited for its
-    selection reports no warning but keeps the snapshot, which still restores
-    the pre-warning brightness."""
+    selection reports no warning but keeps the pre-warning look, which still
+    restores its brightness."""
     mock_restore_cache(
         hass,
         [
@@ -1082,11 +1082,11 @@ async def test_restart_while_a_turn_on_ending_the_warning_waits_uses_the_snapsho
 
 
 @pytest.mark.asyncio
-async def test_restart_mid_warning_without_warning_active_uses_the_snapshot(
+async def test_restart_mid_warning_without_warning_active_uses_the_pre_warning_look(
     hass: HomeAssistant,
 ) -> None:
     """A state written before warning_active existed is judged the old way, by
-    whether a snapshot was taken, so an upgrade landing mid-warning still
+    whether a pre-warning look was saved, so an upgrade landing mid-warning still
     restores the pre-warning brightness instead of mirroring the warn stage's."""
     mock_restore_cache(
         hass,

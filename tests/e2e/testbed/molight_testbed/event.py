@@ -20,7 +20,7 @@ class TestbedButtonEvent(TestbedEntity, EventEntity):
     _attr_device_class = EventDeviceClass.BUTTON
 
     def __init__(self, *args: Any, event_types: list[str]) -> None:
-        """Initialize a button with one integration's click vocabulary."""
+        """Initialize a button with one integration's event types."""
         super().__init__(*args)
         self._attr_event_types = list(event_types)
 
@@ -35,7 +35,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Add remote buttons, one per click vocabulary MoLight resolves."""
+    """Add remote buttons, one per set of event types MoLight resolves."""
     controller = controller_for_entry(hass, entry)
     async_add_entities(
         [

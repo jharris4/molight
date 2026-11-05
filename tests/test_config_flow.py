@@ -7847,7 +7847,7 @@ async def test_light_options_reject_itself_with_entity_id_changed_after_form_ope
 
 
 @pytest.mark.asyncio
-@pytest.mark.allow_warning_log  # two lights wrap Night: load names the fight
+@pytest.mark.allow_warning_log  # two lights wrap Night: load names the shared light
 async def test_scheduled_light_options_reject_member_cycle(
     hass: HomeAssistant,
 ) -> None:

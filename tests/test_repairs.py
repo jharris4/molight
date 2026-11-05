@@ -36,7 +36,7 @@ GROUP = "light.group_1"
 TV = "media_player.tv"
 
 
-def _fight(entity: str, other: str, light: str = REAL) -> dict[str, dict[str, str]]:
+def _shared(entity: str, other: str, light: str = REAL) -> dict[str, dict[str, str]]:
     return {
         f"light_shared_member_{light}": {
             "entity": entity,
@@ -95,14 +95,14 @@ async def test_issues_clear_on_unload_and_return_until_corrected(
 async def test_a_shared_light_is_an_issue_until_the_other_light_goes(
     hass: HomeAssistant,
 ) -> None:
-    """The light first by name owns a shared light and the other names the
-    fight, whichever loaded first; removing the owner ends it."""
+    """The light first by name owns a shared light and the other gets the
+    issue, whichever loaded first; removing the owner clears it."""
     hass.states.async_set(REAL, "off")
     room = make_light_entry(name="Room", lights=[REAL])
     other = make_light_entry(name="Other", lights=[REAL])
     await setup_entries(hass, room, other)
     await settle(hass)
-    assert molight_issues(hass, room.entry_id) == _fight("light.room", "light.other")
+    assert molight_issues(hass, room.entry_id) == _shared("light.room", "light.other")
     assert molight_issues(hass, other.entry_id) == {}
 
     await hass.config_entries.async_remove(other.entry_id)
@@ -116,7 +116,7 @@ async def test_a_shared_light_is_an_issue_until_the_other_light_goes(
 async def test_a_shared_light_issue_clears_when_either_light_gives_it_up(
     hass: HomeAssistant, edited: str
 ) -> None:
-    """Ending the fight through either entry clears the issue, though only
+    """Dropping the shared light from either entry clears the issue, though only
     the edited entry reloads."""
     hass.states.async_set(REAL, "off")
     hass.states.async_set(REAL2, "off")
@@ -124,7 +124,7 @@ async def test_a_shared_light_issue_clears_when_either_light_gives_it_up(
     other = make_light_entry(name="Other", lights=[REAL])
     await setup_entries(hass, room, other)
     await settle(hass)
-    assert molight_issues(hass, room.entry_id) == _fight("light.room", "light.other")
+    assert molight_issues(hass, room.entry_id) == _shared("light.room", "light.other")
 
     entry = other if edited == "owner" else room
     hass.config_entries.async_update_entry(
@@ -139,7 +139,7 @@ async def test_a_shared_light_issue_clears_when_either_light_gives_it_up(
 @pytest.mark.asyncio
 @pytest.mark.allow_warning_log
 async def test_a_shared_light_is_one_issue_after_a_restart(hass: HomeAssistant) -> None:
-    """With both entries known before either loads, the fight is still one issue."""
+    """Known before either loads, the shared light is still one issue."""
     hass.states.async_set(REAL, "off")
     room = make_light_entry(name="Room", lights=[REAL])
     other = make_light_entry(name="Other", lights=[REAL])
@@ -149,7 +149,7 @@ async def test_a_shared_light_is_one_issue_after_a_restart(hass: HomeAssistant) 
     await restart_entries(hass, room, other)
     await settle(hass)
 
-    assert molight_issues(hass, room.entry_id) == _fight("light.room", "light.other")
+    assert molight_issues(hass, room.entry_id) == _shared("light.room", "light.other")
     assert molight_issues(hass, other.entry_id) == {}
 
 
@@ -158,7 +158,7 @@ async def test_a_shared_light_is_one_issue_after_a_restart(hass: HomeAssistant) 
 async def test_a_light_shared_through_a_group_clears_when_the_group_changes(
     hass: HomeAssistant,
 ) -> None:
-    """A fight through a light group ends when the group drops the light,
+    """Sharing through a light group ends when the group drops the light,
     which reloads neither entry."""
     hass.states.async_set(REAL, "off")
     hass.states.async_set(REAL2, "off")
@@ -167,7 +167,7 @@ async def test_a_light_shared_through_a_group_clears_when_the_group_changes(
     other = make_light_entry(name="Other", lights=[REAL])
     await setup_entries(hass, room, other)
     await settle(hass)
-    assert molight_issues(hass, room.entry_id) == _fight("light.room", "light.other")
+    assert molight_issues(hass, room.entry_id) == _shared("light.room", "light.other")
     assert molight_issues(hass, other.entry_id) == {}
 
     hass.states.async_set(GROUP, "off", {"entity_id": [REAL2]})
@@ -183,7 +183,7 @@ async def test_an_owner_named_by_title_is_named_by_its_light_once_it_loads(
     hass: HomeAssistant,
 ) -> None:
     """An entry with no light entity yet is named by title; once its light
-    exists the fight is judged again by entity ID, and the issue follows."""
+    exists the sharing is judged again by entity ID, and the issue follows."""
     hass.states.async_set(REAL, "off")
     room = make_light_entry(name="Room", lights=[REAL])
     other = make_light_entry(name="Other", lights=[REAL])
@@ -191,13 +191,13 @@ async def test_an_owner_named_by_title_is_named_by_its_light_once_it_loads(
     room.add_to_hass(hass)  # known, not loaded: no light entity yet
     await hass.config_entries.async_reload(other.entry_id)
     await settle(hass)
-    assert molight_issues(hass, other.entry_id) == _fight("light.other", room.title)
+    assert molight_issues(hass, other.entry_id) == _shared("light.other", room.title)
 
     assert await hass.config_entries.async_setup(room.entry_id)
     await settle(hass)
 
     assert molight_issues(hass, other.entry_id) == {}
-    assert molight_issues(hass, room.entry_id) == _fight("light.room", "light.other")
+    assert molight_issues(hass, room.entry_id) == _shared("light.room", "light.other")
 
 
 @pytest.mark.asyncio

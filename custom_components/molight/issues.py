@@ -74,7 +74,7 @@ def async_check_shared_members(hass: HomeAssistant) -> None:
     (see light_owners); every other one controlling it gets the issue,
     naming the owner. Run when a virtual light loads, unloads or is removed
     and when a member light group changes, so an issue clears as soon as
-    the fight ends, whichever side ended it.
+    the light stops being shared, whichever side stopped it.
     """
     lights, owned = light_owners(hass)
     names = {entry.entry_id: entity_id for entity_id, entry in lights.items()}

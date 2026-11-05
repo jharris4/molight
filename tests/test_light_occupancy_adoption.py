@@ -162,7 +162,7 @@ async def test_dark_adopts_active_occupancy_into_on_light(
     hass.states.async_set(OCC, "on" if standing == OCC else "off")  # suppressed
     await settle(hass)
 
-    # User turns the light on regardless: ACTIVE with a timer (still bright).
+    # A person turns the light on regardless: ACTIVE with a timer (still bright).
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)
     if standing == DOOR:

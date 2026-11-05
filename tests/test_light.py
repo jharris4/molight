@@ -665,7 +665,7 @@ async def test_virtual_brightness_change(
     state = hass.states.get("light.test_light")
     assert state.attributes["last_brightness_change_virtual"] is None
 
-    # 50s into the 60s timer the user dims via the virtual entity.
+    # 50s into the 60s timer the person dims via the virtual entity.
     freezer.tick(timedelta(seconds=50))
     await hass.services.async_call(
         "light",
@@ -878,10 +878,10 @@ async def test_false_detection_off_delay_is_configurable(
 async def test_false_detection_never_cuts_manual_lights(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A false-detection clear must not shorten lights the user turned on themselves."""
+    """A false-detection clear must not shorten lights a person turned on themselves."""
     await _setup_entries(hass, _fd_occupancy_entry(), _fd_light_entry())
 
-    # User turns the light on; occupancy blips on afterwards.
+    # A person turns the light on; occupancy blips on afterwards.
     await hass.services.async_call("light", "turn_on", {"entity_id": "light.fd_light"})
     await hass.async_block_till_done()
     hass.states.async_set("binary_sensor.motion_1", "on")
@@ -908,11 +908,11 @@ async def test_false_detection_never_cuts_manual_lights(
 async def test_stale_occupancy_ownership_never_cuts_user_lights(
     hass: HomeAssistant, illuminance_entry: MockConfigEntry, freezer
 ) -> None:
-    """Occupancy ownership must not survive a bright off into a user on-period.
+    """Occupancy ownership must not survive a bright off into a person's on-period.
 
     Regression: the bright off left the occupancy-ownership flag
-    set, so a later user-initiated on-period could be cut short by a false-detection
-    occupancy clear.
+    set, so a later on-period a person started could be cut short by a
+    false-detection occupancy clear.
     """
     light = MockConfigEntry(
         domain=DOMAIN,
@@ -940,7 +940,7 @@ async def test_stale_occupancy_ownership_never_cuts_user_lights(
     await _settle(hass)
     assert hass.states.get("light.fd_light").state == "off"
 
-    # The user physically turns a light on; then it goes dark again.
+    # The person physically turns a light on; then it goes dark again.
     hass.states.async_set("light.fd_real", "on")
     await _settle(hass)
     assert hass.states.get("light.fd_light").state == "on"
@@ -948,14 +948,14 @@ async def test_stale_occupancy_ownership_never_cuts_user_lights(
     await _settle(hass)
 
     # A fresh occupancy blip arrives and clears as a false detection over the
-    # user's lights.
+    # person's lights.
     hass.states.async_set("binary_sensor.motion_1", "on")
     await _settle(hass)
     freezer.tick(timedelta(seconds=31))
     hass.states.async_set("binary_sensor.motion_1", "off")
     await _settle(hass)
 
-    # The off delay (5s) must NOT apply; the user owns this on-period.
+    # The off delay (5s) must NOT apply; the person owns this on-period.
     freezer.tick(timedelta(seconds=6))
     async_fire_time_changed(hass)
     await _settle(hass)
@@ -1089,7 +1089,7 @@ async def test_follow_mode_respects_manual_off(hass: HomeAssistant, freezer) -> 
     freezer.move_to("2026-07-02 22:00:00+00:00")
     marker = "2026-07-02T21:00:00+00:00"
     # The light had already applied this window's start before the restart,
-    # so its being off now means the user turned it off manually.
+    # so its being off now means the person turned it off manually.
     mock_restore_cache(
         hass,
         [State("light.porch_light", "off", {"schedule_window_start": marker})],
@@ -1577,7 +1577,7 @@ async def test_dim_during_warn_restarts_timer(hass: HomeAssistant, freezer) -> N
     await _settle(hass)
     assert _mstate(hass) == STATE_WARN
 
-    # User dims the real light during the warn stage.
+    # A person dims the real light during the warn stage.
     hass.states.async_set("light.living_room", "on", {"brightness": 80})
     await _settle(hass)
     state = hass.states.get("light.test_light")

@@ -795,8 +795,8 @@ async def test_virtual_on_during_blink_off_survives_the_stage_ending(
     hass: HomeAssistant, freezer
 ) -> None:
     """The effect timer reaching the warn stage while a turn-on waits for its
-    selection does not drop the turn-on: the user's command is sent after the
-    stage's and the light ends up ACTIVE at the user's brightness."""
+    selection does not drop the turn-on: the person's command is sent after the
+    stage's and the light ends up ACTIVE at the person's brightness."""
     select = _SlowSelect(hass)
     hass.states.async_set("light.ambient", "off")
     await setup_entries(
@@ -865,7 +865,7 @@ async def test_occupancy_on_during_a_waiting_virtual_on_defers_to_it(
     hass: HomeAssistant, freezer
 ) -> None:
     """An automatic turn-on arriving while a virtual one waits is dropped: the
-    user's brightness is kept and the on-period is not counted as lit by
+    person's brightness is kept and the on-period is not counted as lit by
     occupancy."""
     select = _SlowSelect(hass)
     hass.states.async_set("binary_sensor.occ", "off")
@@ -927,7 +927,7 @@ async def test_physical_turn_on_during_slow_selection_keeps_its_brightness(
 ) -> None:
     """A physical turn-on overtakes an automatic one still waiting for its
     selection: the light stays at the brightness it was turned on at, and the
-    on-period is the user's."""
+    on-period is the person's."""
     select = _SlowSelect(hass)
     sensor = f"binary_sensor.{trigger}"
     hass.states.async_set(sensor, "off")
@@ -1093,7 +1093,7 @@ async def test_member_reporting_in_lit_during_a_waiting_virtual_on_is_not_physic
     hass: HomeAssistant, member: str
 ) -> None:
     """A real light that loads already lit while a virtual turn-on waits was
-    not physically turned on: the user's turn-on is still sent."""
+    not physically turned on: the person's turn-on is still sent."""
     select = _SlowSelect(hass)
     calls = _light_calls(hass)
     turn_on = await _begin_turn_on(hass, select, "virtual", member=member)

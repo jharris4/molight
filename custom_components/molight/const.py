@@ -184,7 +184,7 @@ DEFAULT_TURN_OFF_TIMEOUT = 300
 # Brightness (percent, 1-100) applied when the light is turned on
 # *automatically* (by occupancy, a door opening, illuminance going dark, or
 # a schedule window). Manual turn-ons are never affected (they
-# keep whatever brightness the user/last state set). Blank = don't set a
+# keep whatever brightness the person or last state set). Blank = don't set a
 # brightness on automatic turn-ons either (the real lights use their own
 # last/default).
 CONF_AUTO_ON_BRIGHTNESS = "auto_on_brightness"

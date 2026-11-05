@@ -1,7 +1,7 @@
 """Member reports under MoLight's own context are judged, not blindly ignored.
 
 Home Assistant keeps a service call's context on the targeted entity for five
-seconds, so a human change right after a MoLight command arrives under
+seconds, so a person's change right after a MoLight command arrives under
 MoLight's context. Only reports consistent with the command count as echoes.
 """
 
@@ -185,7 +185,7 @@ async def test_quantized_echo_is_not_physical(
 async def test_on_after_our_off_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """An `on` under our turn-off context contradicts the command: a human did it."""
+    """An `on` under our turn-off context contradicts the command: a person did it."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=153)
@@ -204,7 +204,7 @@ async def test_on_after_our_off_is_physical(
 async def test_off_while_our_on_settles_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """An `off` while our turn-on still settles contradicts it: a human did it."""
+    """An `off` while our turn-on still settles contradicts it: a person did it."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=153)
@@ -269,7 +269,8 @@ async def test_late_power_only_reply_is_not_physical(
 async def test_dim_after_echo_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """Once the echo has landed, a different brightness under our context is human."""
+    """Once the echo has landed, a different brightness under our context is a
+    person's."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=153)
@@ -986,9 +987,9 @@ class _LostFirstLight(RealLight):
 async def test_user_turn_on_of_a_member_that_missed_ours_restarts_the_timer(
     hass: HomeAssistant, freezer, hass_admin_user, delay: int
 ) -> None:
-    """A real light misses our turn-on, and a user turns it on from its own
+    """A real light misses our turn-on, and a person turns it on from its own
     card at the same brightness, while our command settles, in the 30 s after,
-    or later. Each time that is the user's turn-on, and the light stays on
+    or later. Each time that is the person's turn-on, and the light stays on
     for the full timeout from then."""
     lamp = _LostFirstLight("lamp")
     await add_real(hass, lamp)
@@ -1052,7 +1053,7 @@ async def test_stale_expectation_is_physical(
 async def test_desaturation_while_settling_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A saturation far from both the command and the old color is human."""
+    """A saturation far from both the command and the old color is a person's."""
     await _setup_color(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=153, hs_color=[240, 80])
@@ -1871,7 +1872,7 @@ async def test_restoring_the_pre_warning_color_is_not_a_recolor(
 async def test_recolor_beside_a_stage_fade_still_cancels_the_warning(
     hass: HomeAssistant, freezer, blend: str
 ) -> None:
-    """Partway through the fade to cyan, a color off its way is still human."""
+    """Partway through the fade to cyan, a color off its way is still a person's."""
     await _lit_red(
         hass,
         blend,

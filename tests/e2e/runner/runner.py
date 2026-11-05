@@ -124,8 +124,8 @@ COMBO_BOOT_LIGHT = "light.e2e_combo_boot_light"
 COLOR_TEMP_LIGHT = "light.e2e_color_temp_virtual"
 COLOR_TEMP_MIX_LIGHT = "light.e2e_color_temp_mix"
 COLOR_TEMP_REMOTE_LAST_ACTION = "sensor.e2e_color_temperature_remote_last_action"
-VOCAB_LIGHT = "light.e2e_vocab"
-VOCAB_REMOTE_LAST_ACTION = "sensor.e2e_vocab_remote_last_action"
+EVENT_TYPES_LIGHT = "light.e2e_event_types"
+EVENT_TYPES_REMOTE_LAST_ACTION = "sensor.e2e_event_types_remote_last_action"
 DUSK_ILLUMINANCE = "binary_sensor.e2e_dusk_illuminance"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
@@ -1976,7 +1976,7 @@ def wait_timer_stage(
             and state["attributes"].get("warning_active") is True
             and state["attributes"].get("pre_warn_brightness") == pct(60)
         ),
-        f"in the {stage} stage with its pre-warning snapshot",
+        f"in the {stage} stage with its pre-warning look saved",
     )
     client.wait_state(
         RAW_TIMER_LIGHT,
@@ -2034,7 +2034,7 @@ def run_timeout_warning_scenario(
         or restored["attributes"].get("pre_warn_brightness") is not None
     ):
         raise AssertionError(
-            f"Re-trigger did not clear warning_active and the snapshot: {restored}"
+            f"Re-trigger left warning_active or the pre-warning look: {restored}"
         )
     client.wait_state(
         RAW_TIMER_LIGHT,
@@ -2841,7 +2841,7 @@ def assert_multi_light_routing(client: HomeAssistantClient) -> None:
 
 
 def assert_fuzzy_member_reporting(client: HomeAssistantClient) -> None:
-    """Prove quantized, XY-reported member echoes are not read as human changes."""
+    """Prove quantized, XY-reported member echoes are not read as a person's changes."""
     client.set_behavior(RAW_MULTI_RGB, brightness_levels=100, xy_color=True)
     client.wait_state(
         RAW_MULTI_RGB,
@@ -2879,7 +2879,7 @@ def assert_fuzzy_member_reporting(client: HomeAssistantClient) -> None:
             and state["attributes"].get("last_color_change_physical")
             == before.get("last_color_change_physical")
         ),
-        "active without reading the fuzzy echo as a human change",
+        "active without reading the fuzzy echo as a person's change",
         duration=2,
     )
     client.call_service("light", "turn_off", {"entity_id": VIRTUAL_MULTI_LIGHT})
@@ -4297,7 +4297,7 @@ def run_restart_warning_prepare() -> None:
             and state["attributes"].get("warning_active") is True
             and state["attributes"].get("pre_warn_brightness") == pct(60)
         ),
-        "in warning with its pre-warning snapshot",
+        "in warning with its pre-warning look saved",
     )
     client.wait_state(
         RAW_TIMER_LIGHT,
@@ -4330,7 +4330,7 @@ def run_restart_warning_verify() -> None:
             and state["attributes"].get("warning_active") is False
             and state["attributes"].get("pre_warn_brightness") is None
         ),
-        "restored active with warning_active and the snapshot cleared",
+        "restored active with warning_active and the pre-warning look cleared",
         timeout=WAIT_TIMEOUT,
     )
     client.wait_state(
@@ -5865,7 +5865,7 @@ def expect_late_end_owed(client: HomeAssistantClient, snapshot: dict[str, Any]) 
             and state["attributes"].get("molight_state") == "idle"
             and state["attributes"].get("schedule_end_off_pending") is True
         ),
-        "off with its missed turn_off end owed to the unreadable member",
+        "off with its missed schedule end off owed to the unreadable member",
         timeout=WAIT_TIMEOUT,
     )
     client.wait_state(
@@ -8805,11 +8805,11 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
     print("PASS: color temperature auto-on, mirror, preset, and mixed routing")
 
 
-def wait_vocab_action(
+def wait_event_types_action(
     client: HomeAssistantClient, action: str, click: str, button: str, event_type: str
 ) -> None:
     client.wait_state(
-        VOCAB_REMOTE_LAST_ACTION,
+        EVENT_TYPES_REMOTE_LAST_ACTION,
         lambda state: (
             state["state"] == action
             and state["attributes"].get("button") == button
@@ -8820,20 +8820,20 @@ def wait_vocab_action(
     )
 
 
-def run_remote_vocabulary_scenarios(client: HomeAssistantClient) -> None:
+def run_remote_event_types_scenarios(client: HomeAssistantClient) -> None:
     """Click resolution per integration, multi-button bindings, no replay on
     recovery."""
     light_id = create_entry(
         client,
         "light",
         {
-            "name": "E2E Vocab",
+            "name": "E2E Event Types",
             "lights": [RAW_TIMER_LIGHT],
             "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
-            "advanced": {"entity_id": "e2e_vocab"},
+            "advanced": {"entity_id": "e2e_event_types"},
         },
-        "Vocab light",
+        "Event types light",
     )
     assert_entry_loaded(client, light_id)
     # A button that has no double click cannot be bound to one.
@@ -8842,7 +8842,7 @@ def run_remote_vocabulary_scenarios(client: HomeAssistantClient) -> None:
         "remote",
         {
             "name": "E2E Rejected Remote",
-            "target_lights": [VOCAB_LIGHT],
+            "target_lights": [EVENT_TYPES_LIGHT],
             "brightness_step": 20,
             **EMPTY_REMOTE_SECTIONS,
             "turn_off": {"off_buttons_double": [EVENT_HUE]},
@@ -8854,8 +8854,8 @@ def run_remote_vocabulary_scenarios(client: HomeAssistantClient) -> None:
         client,
         "remote",
         {
-            "name": "E2E Vocab Remote",
-            "target_lights": [VOCAB_LIGHT],
+            "name": "E2E Event Types Remote",
+            "target_lights": [EVENT_TYPES_LIGHT],
             "brightness_step": 20,
             **EMPTY_REMOTE_SECTIONS,
             "turn_on": {
@@ -8863,7 +8863,7 @@ def run_remote_vocabulary_scenarios(client: HomeAssistantClient) -> None:
             },
             "turn_off": {"off_buttons_double": [EVENT_MATTER, EVENT_Z2M, EVENT_CASETA]},
         },
-        "Vocab remote",
+        "Event types remote",
     )
     assert_entry_loaded(client, remote_id)
 
@@ -8883,14 +8883,14 @@ def run_remote_vocabulary_scenarios(client: HomeAssistantClient) -> None:
         (EVENT_CASETA, "press", "multi_tap"),
     ):
         client.fire_event(button, single)
-        wait_vocab_action(client, "turn_on", "single", button, single)
+        wait_event_types_action(client, "turn_on", "single", button, single)
         client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
         client.fire_event(button, double)
-        wait_vocab_action(client, "turn_off", "double", button, double)
+        wait_event_types_action(client, "turn_off", "double", button, double)
         client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
     # Hue-style: initial_press is the single-click fallback.
     client.fire_event(EVENT_HUE, "initial_press")
-    wait_vocab_action(client, "turn_on", "single", EVENT_HUE, "initial_press")
+    wait_event_types_action(client, "turn_on", "single", EVENT_HUE, "initial_press")
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
 
     # A button recovering from unavailable carries its last event, which must
@@ -8909,15 +8909,14 @@ def run_remote_vocabulary_scenarios(client: HomeAssistantClient) -> None:
         lambda state: state["state"] == "on",
         "on: a stale event is not replayed when its button recovers",
     )
-    client.call_service("light", "turn_off", {"entity_id": VOCAB_LIGHT})
+    client.call_service("light", "turn_off", {"entity_id": EVENT_TYPES_LIGHT})
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
     client.remove_entry(remote_id)
-    wait_entity_absent(client, VOCAB_REMOTE_LAST_ACTION)
-    wait_entry_removed(client, remote_id, "Temporary vocab remote")
-    remove_entry_and_entity(client, light_id, VOCAB_LIGHT)
+    wait_entity_absent(client, EVENT_TYPES_REMOTE_LAST_ACTION)
+    wait_entry_removed(client, remote_id, "Temporary event types remote")
+    remove_entry_and_entity(client, light_id, EVENT_TYPES_LIGHT)
     print(
-        "PASS: click vocabularies resolved per button; no parts of a click "
-        "or replayed clicks"
+        "PASS: event types resolved per button; no parts of a click or replayed clicks"
     )
 
 
@@ -9604,7 +9603,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
             and state["attributes"].get("last_on_physical") is None
             and state["attributes"].get("active_settings") == ACTIVE_SETTINGS_INSIDE
         ),
-        "active at 200 under the inside settings, lit by the user's turn-on",
+        "active at 200 under the inside settings, lit by the person's turn-on",
     )
     park_light_off(client, PARK_SCHEDULED_LIGHT, RAW_MULTI_DIMMER)
     client.set_state(RAW_REMOVAL_MOTION, "off")
@@ -9663,7 +9662,7 @@ SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
         run_hold_release_scenarios,
         run_door_gate_scenarios,
         run_sensor_options_scenarios,
-        run_remote_vocabulary_scenarios,
+        run_remote_event_types_scenarios,
     ],
 }
 

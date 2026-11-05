@@ -657,7 +657,7 @@ async def test_follow_schedule_with_changed_entity_id_is_not_a_new_window(
 async def test_gate_schedule_with_changed_entity_id_still_gates(
     hass: HomeAssistant, virtual_light_behavior_variant
 ) -> None:
-    """A gate schedule that changes entity ID can still open."""
+    """A gate schedule that changes entity ID can still lift."""
     workday = RealBinary("workday", on=False)
     motion = RealBinary("motion")
     member = RealLight("real_1")

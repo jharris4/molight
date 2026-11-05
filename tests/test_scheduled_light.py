@@ -757,9 +757,9 @@ async def test_schedule_end_into_brightness_resumes_what_the_end_would_have_run(
 async def test_schedule_end_off_ends_an_on_period_going_bright_had_cut_short(
     hass: HomeAssistant, freezer, schedule_end_action: str, resumes: bool, crossed: str
 ) -> None:
-    """A Turn off end crossed while the light is off from going bright ends that
-    on-period, so going dark does not resume it under the outside settings.
-    Keep state and Switch state carry it past the end."""
+    """A Turn off schedule end crossed while the light is off from going bright
+    ends that on-period, so going dark does not resume it under the outside
+    settings. Keep state and Switch state carry it past the end."""
     illuminance = "binary_sensor.illuminance"
     settings = {
         CONF_TURN_OFF_TIMEOUT: 60,
@@ -1548,7 +1548,7 @@ async def test_schedule_change_hold_mid_warning_restores_light(
     assert state.state == "on"
     assert state.attributes["auto_off_held"] is True
     assert state.attributes["molight_state"] == STATE_ACTIVE
-    # The pre-warning brightness is restored and the snapshot cleared.
+    # The pre-warning look is restored, then dropped.
     assert state.attributes["brightness"] == 200
     assert state.attributes["pre_warn_brightness"] is None
 
@@ -1563,7 +1563,7 @@ async def test_schedule_change_hold_mid_warning_restores_light(
 async def test_held_schedule_end_mid_warning_restores_then_turns_off(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A pending Turn off end cancels the warning before applying on release."""
+    """A pending schedule end off cancels the warning before applying on release."""
     keep_on = "input_boolean.keep_on"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -1879,7 +1879,7 @@ async def test_schedule_end_takes_over_a_virtual_turn_on_waiting_for_its_selecti
 async def test_held_schedule_end_off_waits_for_a_virtual_turn_on_still_waiting(
     hass: HomeAssistant,
 ) -> None:
-    """A pending Turn off end is kept for a virtual turn-on not sent yet, and
+    """A pending schedule end off is kept for a virtual turn-on not sent yet, and
     applies when the hold releases."""
     select = _SlowSelect(hass)
     keep_on = "input_boolean.keep_on"
@@ -1927,7 +1927,7 @@ async def test_held_schedule_end_off_waits_for_a_virtual_turn_on_still_waiting(
 async def test_hold_release_applies_a_held_end_off_to_a_waiting_turn_on(
     hass: HomeAssistant, freezer, lit_by: str, released: str
 ) -> None:
-    """Releasing the hold applies a pending Turn off end to a turn-on still
+    """Releasing the hold applies a pending schedule end off to a turn-on still
     waiting for its selection, as it does once the turn-on was sent."""
     select = _SlowSelect(hass)
     occupancy = "binary_sensor.inside_occupancy"
@@ -1989,8 +1989,8 @@ async def test_hold_release_applies_a_held_end_off_to_a_waiting_turn_on(
 async def test_waiting_turn_on_cancelled_by_a_schedule_end_reports_off(
     hass: HomeAssistant, lit_by: str
 ) -> None:
-    """A turn-on reports on while it waits for its selection; a Turn off end
-    that cancels it takes that back, and the real light is never lit."""
+    """A turn-on reports on while it waits for its selection; a schedule end
+    off that cancels it takes that back, and the real light is never lit."""
     select = _SlowSelect(hass)
     occupancy = "binary_sensor.inside_occupancy"
     hass.states.async_set("select.light_mode", "Night", {"options": ["Night"]})
@@ -2352,10 +2352,11 @@ async def test_restart_missed_schedule_end_keep_leaves_light_on(
 
 
 @pytest.mark.asyncio
-async def test_restart_inside_window_drops_restored_pending_off(
+async def test_restart_inside_window_drops_restored_pending_schedule_end_off(
     hass: HomeAssistant,
 ) -> None:
-    """A pending off from the last window dies once the next window has begun."""
+    """A pending schedule end off from the last window dies once the next window
+    has begun."""
     keep_on = "input_boolean.keep_on"
     hass.states.async_set(REAL, "on")
     hass.states.async_set(SCHEDULE, "on")
@@ -2508,7 +2509,7 @@ async def test_schedule_swap_preserves_already_pending_boundary(
 
 
 @pytest.mark.asyncio
-async def test_restart_with_held_pending_off_reports_maintained_hold(
+async def test_restart_with_held_pending_schedule_end_off_reports_maintained_hold(
     hass: HomeAssistant,
 ) -> None:
     """A pending schedule end off seeds OCCUPIED under a maintain hold, then applies."""
@@ -2554,10 +2555,10 @@ async def test_restart_with_held_pending_off_reports_maintained_hold(
 
 
 @pytest.mark.asyncio
-async def test_restart_clears_pending_off_when_real_light_is_already_off(
+async def test_restart_clears_pending_schedule_end_off_when_real_light_is_already_off(
     hass: HomeAssistant,
 ) -> None:
-    """A completed pending off cannot cut a later virtual on after a hold cycle."""
+    """A completed schedule end off cannot cut a later virtual on after a hold cycle."""
     switch = "switch.scheduled_light_auto_off"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "off")
@@ -2594,7 +2595,7 @@ async def test_restart_clears_pending_off_when_real_light_is_already_off(
 
 
 @pytest.mark.asyncio
-async def test_restart_held_pending_off_restores_old_warning_before_release(
+async def test_restart_held_schedule_end_off_restores_old_warning_before_release(
     hass: HomeAssistant,
 ) -> None:
     """A pending schedule end off cancels its old warning before waiting."""
@@ -2762,7 +2763,7 @@ async def test_reload_with_different_schedule_does_not_catch_up_boundary(
 
 
 @pytest.mark.asyncio
-async def test_restored_pending_off_is_dropped_when_action_is_keep(
+async def test_restored_pending_schedule_end_off_is_dropped_when_action_is_keep(
     hass: HomeAssistant,
 ) -> None:
     """A schedule end off pending under turn_off dies with a reload to keep."""
@@ -2793,8 +2794,8 @@ async def test_restored_pending_off_is_dropped_when_action_is_keep(
 async def test_options_reload_to_keep_drops_pending_schedule_end_off(
     hass: HomeAssistant,
 ) -> None:
-    """Changing the At schedule end field to keep releases a pending off held by a
-    keep-on."""
+    """Changing the At schedule end field to keep releases a pending schedule end
+    off held by a keep-on."""
     keep_on = "input_boolean.keep_on"
     hass.states.async_set(REAL, "on")
     hass.states.async_set(SCHEDULE, "on")
@@ -3062,7 +3063,7 @@ async def test_schedule_end_off_stays_pending_for_unavailable_keep_on_entity(
     assert state.state == "on"
     assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is True
 
-    # The recovered hold clearing applies the pending off.
+    # The recovered hold clearing applies the pending schedule end off.
     hass.states.async_set(keep_on, "off")
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "off"

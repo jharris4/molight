@@ -338,7 +338,7 @@ async def test_remove_entry_removes_references_from_surviving_entries(
     """Removing a sensor entry cleans its references out of surviving entries.
 
     A dangling reference silently degrades the entries that hold it, worst of all a
-    gate-mode schedule sensor, which would read as a gate that never opens
+    gate-mode schedule sensor, which would read as a gate that never lifts
     and block every automatic turn-on.
     """
     occupancy = _occupancy_entry()  # registers binary_sensor.rm_occupancy

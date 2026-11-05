@@ -60,7 +60,7 @@ def _mstate(hass: HomeAssistant) -> str:
     return _state(hass).attributes["molight_state"]
 
 
-def _snapshot(hass: HomeAssistant) -> dict:
+def _tracked_attrs(hass: HomeAssistant) -> dict:
     attrs = _state(hass).attributes
     return {k: attrs[k] for k in ATTR_KEYS}
 
@@ -112,7 +112,7 @@ async def test_attributes_unchanged_through_effect_and_warn(
     await setup_entries(hass, entry)
 
     await _turn_on_virtual(hass, brightness=200)
-    base = _snapshot(hass)
+    base = _tracked_attrs(hass)
     assert base["last_on_virtual"] is not None
     assert base["last_brightness_change_virtual"] is not None
 
@@ -123,8 +123,8 @@ async def test_attributes_unchanged_through_effect_and_warn(
     async_fire_time_changed(hass)
     await settle(hass)
     assert _mstate(hass) == STATE_EFFECT
-    assert _snapshot(hass) == base
-    # The snapshot is exposed while the warning shows (restart insurance).
+    assert _tracked_attrs(hass) == base
+    # The pre-warning look is exposed while the warning shows (restart insurance).
     assert _state(hass).attributes["pre_warn_brightness"] == 200
 
     # EFFECT → WARN (real lights turned on again at the warn brightness,
@@ -135,7 +135,7 @@ async def test_attributes_unchanged_through_effect_and_warn(
     assert _mstate(hass) == STATE_WARN
     assert _state(hass).attributes["brightness"] == 255
     assert _state(hass).attributes["pre_warn_brightness"] == 200
-    assert _snapshot(hass) == base
+    assert _tracked_attrs(hass) == base
 
     # WARN → off.
     freezer.tick(timedelta(seconds=16))
@@ -143,7 +143,7 @@ async def test_attributes_unchanged_through_effect_and_warn(
     await settle(hass)
     assert _state(hass).state == "off"
     assert _mstate(hass) == STATE_IDLE
-    assert _snapshot(hass) == base
+    assert _tracked_attrs(hass) == base
     assert _state(hass).attributes["pre_warn_brightness"] is None
 
 
@@ -421,7 +421,7 @@ async def test_virtual_on_during_warn_restores_pre_warn_brightness(
     assert state.attributes["molight_state"] == STATE_ACTIVE
     assert state.attributes["brightness"] == 200
     assert _real_calls(calls, "turn_on")[-1]["service_data"]["brightness"] == 200
-    # The restore is not a user brightness change.
+    # The restore is not a person's brightness change.
     assert state.attributes["last_brightness_change_virtual"] == base_change
 
     # A fresh timer runs from the re-trigger.
@@ -576,8 +576,8 @@ async def test_physical_dim_during_warning_honors_new_brightness(
     hass: HomeAssistant, freezer
 ) -> None:
     """A physical dim mid-warning cancels the sequence and restarts the full
-    timer, but keeps the dim's own brightness; the pre-warning snapshot is not
-    restored over the user's explicit choice."""
+    timer, but keeps the dim's own brightness; the pre-warning look is not
+    restored over the person's explicit choice."""
     entry = make_light_entry(effect_timeout=10, effect_brightness=50, warn_timeout=15)
     await setup_entries(hass, entry)
 
@@ -601,8 +601,8 @@ async def test_physical_dim_during_warning_honors_new_brightness(
     assert state.attributes["pre_warn_brightness"] is None
     assert state.attributes["last_brightness_change_physical"] is not None
 
-    # A fresh timer started: the warning comes back around, snapshotting
-    # the dimmed brightness this time.
+    # A fresh timer started: the warning comes back around, saving the dimmed
+    # brightness as the pre-warning look this time.
     freezer.tick(timedelta(seconds=59))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -806,7 +806,7 @@ async def test_physical_recolor_during_warning_restores_pre_warning_brightness(
     assert state.attributes["brightness"] == 200
     assert state.attributes["hs_color"] == (200.0, 90.0)
     assert state.attributes["pre_warn_brightness"] is None
-    # The user's color stands: only the brightness is sent.
+    # The person's color stands: only the brightness is sent.
     assert _member_turn_ons(calls) == [{"entity_id": [REAL], "brightness": 200}]
 
 

@@ -2044,7 +2044,7 @@ async def test_combined_carry_is_not_saved_once_startup_has_settled(
     await _genuine_trigger_then_maintain_hold(hass, freezer)
 
     await restart_entries(hass, entry, started=False)
-    hass.states.async_set("binary_sensor.m2", "off")  # the room emptied while down
+    hass.states.async_set("binary_sensor.m2", "off")  # cleared while down
     await finish_startup(hass)
     await settle(hass)
     assert hass.states.get(combined).state == "off"
@@ -2839,7 +2839,7 @@ async def test_illuminance_restores_state(
 async def test_illuminance_unavailable_before_first_reading(
     hass: HomeAssistant, illuminance_entry: MockConfigEntry
 ) -> None:
-    """Without a reading the sensor must not claim 'dark'; off opens the gates."""
+    """Without a reading the sensor must not claim 'dark'; off lifts the gates."""
     illuminance_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(illuminance_entry.entry_id)
     await hass.async_block_till_done()

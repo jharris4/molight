@@ -787,8 +787,8 @@ async def test_release_outside_a_gate_window_runs_a_fresh_timer(
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("hold", ["switch", "keep_on"])
 async def test_release_applies_a_held_gate_end(hass: HomeAssistant, hold: str) -> None:
-    """A Gate and turn off end that a hold kept from a light turned on manually is
-    applied when the hold releases."""
+    """A Gate and turn off schedule end off that a hold kept from a light turned on
+    manually is applied when the hold releases."""
     await _hold_through_gate_end(hass, hold)
     calls = record_service_calls(hass)
     await _hold(hass, hold, on=False)
@@ -831,7 +831,8 @@ async def test_gate_window_start_drops_a_held_gate_end(
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("hold", ["switch", "keep_on"])
 async def test_restart_keeps_a_held_gate_end(hass: HomeAssistant, hold: str) -> None:
-    """A pending Gate and turn off end survives a restart under the hold."""
+    """A pending Gate and turn off schedule end off survives a restart under the
+    hold."""
     entry = await _hold_through_gate_end(hass, hold)
     hass.states.async_set(REAL, "on")
     await settle(hass)

@@ -2139,9 +2139,9 @@ async def test_follow_member_recovery_mid_window_reasserts_window(
 ) -> None:
     """A member rebooting mid-window is turned on again with the scheduled settings.
 
-    Whatever it boots into (off, or lit at its own defaults) is not human
-    activity: the window still owns the lights, so the auto-on brightness is
-    re-sent and the machine stays SCHEDULED.
+    Whatever it boots into (off, or lit at its own defaults) is not a
+    person's change: the window still owns the lights, so the auto-on brightness
+    is re-sent and the machine stays SCHEDULED.
     """
     calls = _record_calls(hass)
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})

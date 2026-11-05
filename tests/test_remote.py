@@ -87,7 +87,7 @@ if TYPE_CHECKING:
 # must never fire. A Lutron Caséta button re-exposed as an event entity (the
 # lutron-caseta-events integration) has press/multi_tap.
 PICO_TYPES = ["press", "release"]
-# Hue's default button vocabulary; a Hue tap switch has only initial_press.
+# Hue's default button event types; a Hue tap switch has only initial_press.
 HUE_TYPES = ["initial_press", "repeat", "short_release", "long_press", "long_release"]
 HUE_TAP_TYPES = ["initial_press"]
 LUTRON_EVENT_TYPES = ["press", "release", "multi_tap", "long_press"]
@@ -255,9 +255,9 @@ async def test_lutron_event_entity_single_vs_double_click(
     assert _vlight(hass).state == "on"
 
 
-# Device-resolved vocabularies: (event_types, single, double, events that
+# Device-resolved event types: (event_types, single, double, events that
 # must never fire: parts of a click, long, held and triple presses).
-DEVICE_RESOLVED_VOCABULARIES = {
+DEVICE_RESOLVED_EVENT_TYPES = {
     "homekit": (
         ["single_press", "double_press", "long_press"],
         "single_press",
@@ -315,13 +315,13 @@ DEVICE_RESOLVED_VOCABULARIES = {
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("vocabulary", list(DEVICE_RESOLVED_VOCABULARIES))
-async def test_device_resolved_click_vocabularies(
-    hass: HomeAssistant, light_entry: MockConfigEntry, vocabulary: str
+@pytest.mark.parametrize("device", list(DEVICE_RESOLVED_EVENT_TYPES))
+async def test_device_resolved_click_event_types(
+    hass: HomeAssistant, light_entry: MockConfigEntry, device: str
 ) -> None:
     """single_press/double_press and their siblings each fire their binding
     exactly once; parts of a click and long, held and triple presses fire nothing."""
-    types, single, double, ignored = DEVICE_RESOLVED_VOCABULARIES[vocabulary]
+    types, single, double, ignored = DEVICE_RESOLVED_EVENT_TYPES[device]
     remote = _remote_entry(
         **{
             CONF_TOGGLE_BUTTONS_SINGLE: ["event.button"],
@@ -1733,7 +1733,7 @@ async def test_click_binding_judged_on_its_event_types(
     hass.states.async_set("event.button", "unknown", attributes)
     key = CONF_ON_BUTTONS_SINGLE if click == "single" else CONF_ON_BUTTONS_DOUBLE
     user_input = {
-        CONF_NAME: "Vocab Remote",
+        CONF_NAME: "Event Types Remote",
         CONF_TARGET_LIGHTS: ["light.test_light"],
         CONF_BRIGHTNESS_STEP: 10,
         **EMPTY_REMOTE_SECTIONS,
@@ -2013,14 +2013,14 @@ async def test_remote_options_reject_missing_targets(hass: HomeAssistant) -> Non
 
 
 # ---------------------------------------------------------------------------
-# Native integration vocabularies
+# Native integration event types
 # ---------------------------------------------------------------------------
 
 # Each button's event_types as Home Assistant 2026.11's own
 # integrations build them (the components' event.py unless noted), with the
 # single and double click MoLight must resolve (None: the button has none)
 # and the events that must never fire a binding.
-NATIVE_VOCABULARIES = {
+NATIVE_EVENT_TYPES = {
     # matter: multi-press switch with long press.
     "matter_multi_press": (
         ["multi_press_1", "multi_press_2", "long_press", "long_release"],
@@ -2233,7 +2233,7 @@ NATIVE_VOCABULARIES = {
 }
 
 # Event entities with no click at all: a single-click binding is rejected.
-NATIVE_NON_CLICK_VOCABULARIES = {
+NATIVE_NON_CLICK_EVENT_TYPES = {
     "bthome_dimmer": ["rotate_left", "rotate_right"],
     "bthome_command": ["off", "on", "toggle", "step_up", "step_down"],
     "xiaomi_ble_cube": ["rotate_left", "rotate_right"],
@@ -2243,7 +2243,7 @@ NATIVE_NON_CLICK_VOCABULARIES = {
 
 
 class _NativeButton(EventEntity):
-    """A real event entity with one integration's vocabulary."""
+    """A real event entity with one integration's event types."""
 
     _attr_should_poll = False
 
@@ -2281,13 +2281,13 @@ async def _create_remote_through_flow(hass: HomeAssistant, sections: dict) -> di
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("integration", list(NATIVE_VOCABULARIES))
-async def test_native_integration_vocabulary(
+@pytest.mark.parametrize("integration", list(NATIVE_EVENT_TYPES))
+async def test_native_integration_event_types(
     hass: HomeAssistant, light_entry: MockConfigEntry, freezer, integration: str
 ) -> None:
     """Each native button shape passes setup for the clicks it has, rejects a
     double click it lacks, and fires each bound click exactly once."""
-    types, single, double, ignored = NATIVE_VOCABULARIES[integration]
+    types, single, double, ignored = NATIVE_EVENT_TYPES[integration]
     hass.states.async_set("light.living_room", "off")
     await setup_entries(hass, light_entry)
     button = await _add_native_button(hass, types)
@@ -2339,13 +2339,13 @@ async def test_native_integration_vocabulary(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("integration", list(NATIVE_NON_CLICK_VOCABULARIES))
+@pytest.mark.parametrize("integration", list(NATIVE_NON_CLICK_EVENT_TYPES))
 async def test_native_non_click_entity_rejects_a_single_click(
     hass: HomeAssistant, light_entry: MockConfigEntry, integration: str
 ) -> None:
     """A dial, cube, command or doorbell entity has no single click to bind."""
     await setup_entries(hass, light_entry)
-    button = await _add_native_button(hass, NATIVE_NON_CLICK_VOCABULARIES[integration])
+    button = await _add_native_button(hass, NATIVE_NON_CLICK_EVENT_TYPES[integration])
 
     result = await _create_remote_through_flow(
         hass, {REMOTE_ACTION_ON: {CONF_ON_BUTTONS_SINGLE: [button.entity_id]}}
