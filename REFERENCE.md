@@ -448,7 +448,7 @@ actions:
 
 ### Wrapping another virtual light
 
-A virtual light can control another virtual light. The wrapped light keeps its own timer, sensors, stages and schedule, and adding one in the form brings up a page that points this out before the light is saved.
+A virtual light can control another virtual light. The wrapped light keeps its own timer, sensors, stages and schedule, and adding one in the form brings up a step that points this out before the light is saved.
 
 - **What the wrapped light does by itself** (its timer turning it off, a warn stage dimming it, its own sensor lighting it) is not a physical change for the light that wraps it. A wrapping light with a 300 s timeout over a wrapped light with a 60 s one goes off after 60 s without recording a manual off. Turn off the wrapped light's Auto-off switch when the wrapping light's timeout should govern.
 - **A manual change counts for both:** a physical change on the wrapped light's bulbs, or a command through its entity, also a turn-on of a wrapped light that is already on.

@@ -169,7 +169,7 @@ from .helpers import (
     light_descendants as _light_descendants,
     light_member_ids as _light_member_ids,
     light_owners as _light_owners,
-    lights_commanded as _lights_commanded,
+    lights_controlled as _lights_controlled,
     lights_lit_with as _lights_lit_with,
     lights_support_brightness,
     lights_support_color,
@@ -1029,7 +1029,7 @@ def _stale_light_settings(
     """Recheck a light's entry settings (timeouts, keep-on entities) as things are now.
 
     An occupancy timeout can be raised, or a keep-on group edited, while a later
-    page of the light's form is open, since the unsaved light does not reference
+    step of the light's form is open, since the unsaved light does not reference
     it yet. Returns the failing settings set (None for a regular
     Virtual Light) and the errors.
     """
@@ -1906,7 +1906,7 @@ def _light_member_cycle_candidates(
 def _shared_light_candidates(
     hass: HomeAssistant, edited_entry: config_entries.ConfigEntry | None = None
 ) -> list[str]:
-    """Light entity IDs that would add a light that another virtual light commands."""
+    """Light entity IDs that would add a light that another virtual light controls."""
     own = edited_entry.entry_id if edited_entry is not None else None
     owners = _light_owners(hass, own_entry_id=own)
     return sorted(
@@ -1939,15 +1939,15 @@ def _groups_with_virtual_lights(
 def _overlapping_picks(
     hass: HomeAssistant, picks: Sequence[str]
 ) -> tuple[str, str] | None:
-    """Two picks that would each command one light, as separate virtual lights."""
+    """Two picks that would each control one light, as separate virtual lights."""
     lights = _virtual_light_entries(hass, _VIRTUAL_LIGHT_TYPES)
     owners: dict[str, str] = {}
     for pick in picks:
-        commanded = _lights_commanded(hass, [pick], lights)
-        for light in commanded:
+        controlled = _lights_controlled(hass, [pick], lights)
+        for light in controlled:
             if (other := owners.get(light)) is not None:
                 return other, pick
-        owners.update(dict.fromkeys(commanded, pick))
+        owners.update(dict.fromkeys(controlled, pick))
     return None
 
 
@@ -1955,19 +1955,19 @@ def _reserved_by_discovery(hass: HomeAssistant, members: Sequence[str]) -> bool:
     """Whether a discovery that is creating its entries has one of these lights."""
     reserved = hass.data.get(DATA_DISCOVERY_RESERVED, set())
     lights = _virtual_light_entries(hass, _VIRTUAL_LIGHT_TYPES)
-    return not reserved.isdisjoint(_lights_commanded(hass, members, lights))
+    return not reserved.isdisjoint(_lights_controlled(hass, members, lights))
 
 
 def _disjoint_picks(hass: HomeAssistant, candidates: Sequence[str]) -> list[str]:
     """Candidates to preselect: lights first, then groups that overlap none of them."""
     lights = _virtual_light_entries(hass, _VIRTUAL_LIGHT_TYPES)
-    commanded = {c: _lights_commanded(hass, [c], lights) for c in candidates}
+    controlled = {c: _lights_controlled(hass, [c], lights) for c in candidates}
     picks: set[str] = set()
     taken: set[str] = set()
-    for candidate in sorted(candidates, key=lambda c: len(commanded[c])):
-        if taken.isdisjoint(commanded[candidate]):
+    for candidate in sorted(candidates, key=lambda c: len(controlled[c])):
+        if taken.isdisjoint(controlled[candidate]):
             picks.add(candidate)
-            taken |= commanded[candidate]
+            taken |= controlled[candidate]
     return [c for c in candidates if c in picks]
 
 
@@ -2010,7 +2010,7 @@ def _entity_label(hass: HomeAssistant, entity_id: str) -> str:
 def _show_wrapped_lights(
     flow: config_entries.ConfigFlow | config_entries.OptionsFlow, lights: list[str]
 ) -> config_entries.FlowResult:
-    """Show the page that names the virtual lights that a light is about to wrap."""
+    """Show the step that names the virtual lights that a light is about to wrap."""
     return flow.async_show_form(
         step_id="confirm_wrapped_lights",
         data_schema=vol.Schema({}),
@@ -2313,7 +2313,7 @@ class MoLightConfigFlow(
         # Stashed entry settings while the Entity ID already exists step is
         # shown.
         self._pending: dict[str, Any] | None = None
-        # Stashed create while the wrapped-lights notice is shown, and the
+        # Stashed create while the wrapped-lights step is shown, and the
         # wrapped lights it has already named.
         self._wrapped_pending: dict[str, Any] | None = None
         self._wrapped_confirmed: list[str] = []
@@ -2481,7 +2481,7 @@ class MoLightConfigFlow(
         )
         if errors:
             return None, errors
-        # Another light may have taken a member since the first page checked it.
+        # Another light may have taken a member since the first step checked it.
         if entity_type in _VIRTUAL_LIGHT_TYPES and (
             errors := self._new_light_errors(data)
         ):
@@ -2834,7 +2834,7 @@ class MoLightConfigFlow(
         disc = self._discovery
         candidates = disc["candidates"]
         is_light = disc["scan"][0] == "light"
-        # A group edited while a later page was open may now overlap a pick.
+        # A group edited while a later step was open may now overlap a pick.
         if is_light and _overlapping_picks(self.hass, disc["selected"]):
             return await self.async_step_discover_light_select(
                 {
@@ -2849,7 +2849,7 @@ class MoLightConfigFlow(
         lights = _virtual_light_entries(self.hass, _VIRTUAL_LIGHT_TYPES)
         claims = {
             entity_id: (
-                _lights_commanded(self.hass, [entity_id], lights)
+                _lights_controlled(self.hass, [entity_id], lights)
                 if is_light
                 else {entity_id}
             )
@@ -4216,7 +4216,7 @@ class MoLightConfigFlow(
             self.hass, data, self._keep_on_exclusions()
         )
         if errors:
-            # An occupancy timeout or keep-on group changed while a later page was open.
+            # An occupancy timeout or keep-on group changed while a later step was open.
             return self._show_scheduled_light_settings_set_form(
                 settings_set, None, errors
             )
@@ -4304,7 +4304,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         }
         self._scheduled_light_shared: dict[str, Any] | None = None
         self._init_scheduled_light_steps()
-        # Entry settings held while the wrapped-lights notice is shown, and the
+        # Entry settings held while the wrapped-lights step is shown, and the
         # wrapped lights it has already named.
         self._wrapped_pending: dict[str, Any] | None = None
         self._wrapped_confirmed: list[str] = []
@@ -4363,7 +4363,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
     async def async_step_confirm_wrapped_lights(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Save once the wrapped-lights notice is submitted."""
+        """Save once the wrapped-lights step is submitted."""
         pending = self._wrapped_pending
         self._wrapped_confirmed.extend(pending["lights"])
         if self._cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT:
@@ -4975,7 +4975,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             self._keep_on_exclusions(),
         )
         if errors:
-            # An occupancy timeout or keep-on group changed while a later page was open.
+            # An occupancy timeout or keep-on group changed while a later step was open.
             return self._show_scheduled_light_settings_set_form(
                 settings_set, None, errors
             )

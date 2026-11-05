@@ -1626,7 +1626,7 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
     assert suggested[CONF_TURN_ON_SELECT_OPTION] == "Day"
     assert suggested[CONF_TURN_ON_SELECT_SOURCE_ENTITY] == "input_select.theme"
 
-    # A bad option is rejected on this page, and the form stays on this settings set.
+    # A bad option is rejected on this step, and the form stays on this settings set.
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Nope"}
     )
@@ -5909,7 +5909,7 @@ async def test_options_form_opened_before_a_conversion_is_rejected(
         },
     )
     if direction == "convert_to_regular":
-        # The Virtual Scheduled Light form only saves after both settings set pages.
+        # The Virtual Scheduled Light form only saves after both settings set steps.
         assert result["step_id"] == "scheduled_light_outside"
         for sections in (EMPTY_LIGHT_SECTIONS, EMPTY_INSIDE_LIGHT_SECTIONS):
             result = await hass.config_entries.options.async_configure(
@@ -7705,7 +7705,7 @@ async def _submit_light_options(
 async def _pass_wrapped_notice(
     hass: HomeAssistant, result: dict, *, options: bool = True
 ) -> dict:
-    """Submit the page that names the virtual lights a light now wraps."""
+    """Submit the step that names the virtual lights a light now wraps."""
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "confirm_wrapped_lights"
     flows = hass.config_entries.options if options else hass.config_entries.flow
@@ -7771,7 +7771,7 @@ async def test_light_options_reject_cycle_from_stale_form(
 async def test_light_options_final_page_rejects_cycle_closed_meanwhile(
     hass: HomeAssistant, scheduled: bool
 ) -> None:
-    """A cycle that another light's save closed behind a later page is rejected."""
+    """A cycle that another light's save closed behind a later step is rejected."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
     hall = (
@@ -7811,7 +7811,7 @@ async def test_light_options_final_page_rejects_cycle_closed_meanwhile(
         )
         assert result["step_id"] == "light_selection"
 
-    # Outer comes to include Hall while Hall's last page is open.
+    # Outer comes to include Hall while Hall's last step is open.
     other = await hass.config_entries.options.async_init(outer.entry_id)
     other = await hass.config_entries.options.async_configure(
         other["flow_id"],
@@ -7965,20 +7965,22 @@ async def test_create_rejects_a_light_wrapped_while_the_form_was_open(
     await setup_entries(hass, _light_entry("Hall", "hall"))
 
     if scheduled:
-        page = {
+        user_input = {
             CONF_NAME: "Other",
             CONF_LIGHTS: ["light.hall_real"],
             CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
             SECTION_ADVANCED: {},
         }
     else:
-        page = {
+        user_input = {
             **EMPTY_LIGHT_CREATE_SECTIONS,
             CONF_NAME: "Other",
             CONF_LIGHTS: ["light.hall_real"],
             CONF_LIGHT_TIMEOUT: 60,
         }
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], page)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input
+    )
 
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {CONF_LIGHTS: "light_shared"}
@@ -8046,7 +8048,7 @@ async def test_scheduled_light_options_reject_a_light_another_virtual_light_cont
 async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
     hass: HomeAssistant, scheduled: bool
 ) -> None:
-    """A light that another light's save took behind a later page is rejected."""
+    """A light that another light's save took behind a later step is rejected."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
     hall = (
@@ -8086,7 +8088,7 @@ async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
         )
         assert result["step_id"] == "light_selection"
 
-    # Outer takes the light while Hall's last page is open.
+    # Outer takes the light while Hall's last step is open.
     other = await hass.config_entries.options.async_init(outer.entry_id)
     other = await hass.config_entries.options.async_configure(
         other["flow_id"],
@@ -8109,7 +8111,7 @@ async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("taken", ["by_another_light", "by_a_group_edit", "own_id"])
 @pytest.mark.parametrize(
-    "last_page",
+    "last_step",
     [
         "selection",
         "collision",
@@ -8119,14 +8121,14 @@ async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
     ],
 )
 async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
-    hass: HomeAssistant, last_page: str, taken: str
+    hass: HomeAssistant, last_step: str, taken: str
 ) -> None:
-    """A new light's last page rejects a light that another light took behind it,
+    """A new light's last step rejects a light that another light took behind it,
     or a member group that came to name the entity ID the new light will get."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
     hass.states.async_set("light.group", "off", {"entity_id": ["light.spare"]})
-    if last_page.endswith("collision"):
+    if last_step.endswith("collision"):
         hass.states.async_set("light.new", "off")
     outer = _light_entry("Outer", "outer")
     await setup_entries(hass, outer, _light_entry("Inner", "inner"))
@@ -8134,7 +8136,7 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
     settings_set = {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
 
     result = await _start_create(hass)
-    if last_page.startswith("scheduled"):
+    if last_step.startswith("scheduled"):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT}
         )
@@ -8151,7 +8153,7 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
             result["flow_id"], settings_set
         )
         assert result["step_id"] == "scheduled_light_inside"
-        if last_page == "scheduled_collision":
+        if last_step == "scheduled_collision":
             result = await hass.config_entries.flow.async_configure(
                 result["flow_id"], {**settings_set, SECTION_STANDBY: {}}
             )
@@ -8159,25 +8161,27 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
         )
-        page = {
+        user_input = {
             **settings_set,
             SECTION_ADVANCED: {},
             CONF_NAME: "New",
             CONF_LIGHTS: [member],
         }
-        if last_page == "selection":
-            page[SECTION_BEHAVIOR] = {CONF_TURN_ON_SELECT_ENTITY: "select.scene"}
-        elif last_page == "wrapped_notice":
-            page[CONF_LIGHTS] = [member, "light.inner"]
-        result = await hass.config_entries.flow.async_configure(result["flow_id"], page)
+        if last_step == "selection":
+            user_input[SECTION_BEHAVIOR] = {CONF_TURN_ON_SELECT_ENTITY: "select.scene"}
+        elif last_step == "wrapped_notice":
+            user_input[CONF_LIGHTS] = [member, "light.inner"]
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], user_input
+        )
     expected_step = {
         "selection": "light_selection",
         "wrapped_notice": "confirm_wrapped_lights",
         "scheduled_inside": "scheduled_light_inside",
-    }.get(last_page, "confirm_entity_id")
+    }.get(last_step, "confirm_entity_id")
     assert result["step_id"] == expected_step
 
-    # Outer takes the light while the new light's last page is open.
+    # Outer takes the light while the new light's last step is open.
     if taken == "by_another_light":
         other = await hass.config_entries.options.async_init(outer.entry_id)
         other = await hass.config_entries.options.async_configure(
@@ -8187,7 +8191,7 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
         assert other["type"] == FlowResultType.CREATE_ENTRY
         await hass.async_block_till_done()
     elif taken == "own_id":
-        own_id = "light.new_2" if last_page.endswith("collision") else "light.new"
+        own_id = "light.new_2" if last_step.endswith("collision") else "light.new"
         hass.states.async_set(
             "light.group", "off", {"entity_id": ["light.spare", own_id]}
         )
@@ -8196,11 +8200,11 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
             "light.group", "off", {"entity_id": ["light.spare", "light.outer_real"]}
         )
 
-    if last_page == "selection":
+    if last_step == "selection":
         user_input = {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
-    elif last_page == "scheduled_inside":
+    elif last_step == "scheduled_inside":
         user_input = {**settings_set, SECTION_STANDBY: {}}
-    elif last_page == "wrapped_notice":
+    elif last_step == "wrapped_notice":
         user_input = {}
     else:
         user_input = {"next_step_id": "entity_id_proceed"}
@@ -8209,7 +8213,7 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
     )
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == (
-        "scheduled_light" if last_page.startswith("scheduled") else "light"
+        "scheduled_light" if last_step.startswith("scheduled") else "light"
     )
     assert result["errors"] == {
         CONF_LIGHTS: "light_member_cycle" if taken == "own_id" else "light_shared"
@@ -8235,26 +8239,26 @@ _KEEP_ON_FINAL_PAGES = [
 @pytest.mark.parametrize(
     "edited", ["member", "own_id", None], ids=["group_edited", "own_id", "control"]
 )
-@pytest.mark.parametrize("last_page", _KEEP_ON_FINAL_PAGES)
+@pytest.mark.parametrize("last_step", _KEEP_ON_FINAL_PAGES)
 async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
-    hass: HomeAssistant, last_page: str, edited: str | None
+    hass: HomeAssistant, last_step: str, edited: str | None
 ) -> None:
     """A keep-on group that gains the light's member, or the entity ID the light
-    has or will get, behind a later page would hold it on for good, so the final
+    has or will get, behind a later step would hold it on for good, so the final
     save is rejected."""
     await _setup_night_schedule(hass)
     member = "light.subject_real"
     hass.states.async_set(member, "off")
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
     hass.states.async_set("light.keep", "off", {"entity_id": ["light.spare"]})
-    if last_page.endswith("collision"):
+    if last_step.endswith("collision"):
         hass.states.async_set("light.subject", "off")
     await setup_entries(hass, _light_entry("Inner", "inner"))
     flow = hass.config_entries.flow
-    scheduled = last_page.startswith("scheduled")
-    if last_page.startswith("scheduled_options"):
+    scheduled = last_step.startswith("scheduled")
+    if last_step.startswith("scheduled_options"):
         entry = _scheduled_light_entry("Subject", "subject")
-    elif last_page.startswith("options"):
+    elif last_step.startswith("options"):
         entry = _light_entry("Subject", "subject")
     else:
         entry = None
@@ -8264,9 +8268,9 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
     keep_on = {SECTION_SENSORS: {CONF_HOLD_ENTITIES: ["light.keep"]}}
     select = {SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"}}
     settings_set = {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
-    members = [member, "light.inner"] if "wrapped" in last_page else [member]
+    members = [member, "light.inner"] if "wrapped" in last_step else [member]
 
-    if last_page == "discovery_selection":
+    if last_step == "discovery_selection":
         result = await _reach_discovery_select(hass, "discover_light")
         result = await flow.async_configure(
             result["flow_id"], {CONF_SELECTED_ENTITIES: [member]}
@@ -8297,9 +8301,9 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
             result["flow_id"], {**settings_set, **keep_on}
         )
         assert result["step_id"] == "scheduled_light_inside"
-        if not last_page.endswith("inside"):
+        if not last_step.endswith("inside"):
             inside = {**settings_set, SECTION_STANDBY: {}}
-            if last_page.endswith("selection"):
+            if last_step.endswith("selection"):
                 inside.update(select)
             result = await flow.async_configure(result["flow_id"], inside)
     else:
@@ -8308,16 +8312,16 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
             result = await flow.async_configure(
                 result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
             )
-            page = {SECTION_ADVANCED: {}}
+            user_input = {SECTION_ADVANCED: {}}
         else:
             result = await flow.async_init(entry.entry_id)
-            page = {}
-        page.update(
+            user_input = {}
+        user_input.update(
             {**settings_set, **keep_on, CONF_NAME: "Subject", CONF_LIGHTS: members}
         )
-        if last_page.endswith("selection"):
-            page.update(select)
-        result = await flow.async_configure(result["flow_id"], page)
+        if last_step.endswith("selection"):
+            user_input.update(select)
+        result = await flow.async_configure(result["flow_id"], user_input)
     assert (
         result["step_id"]
         == {
@@ -8327,14 +8331,14 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
             "notice": "confirm_wrapped_lights",
             "collision": "confirm_entity_id",
             "inside": "scheduled_light_inside",
-        }[last_page.rsplit("_", 1)[-1]]
+        }[last_step.rsplit("_", 1)[-1]]
     )
 
     if edited:
         # A new light whose entity ID is taken gets the next free one.
-        if last_page.endswith("collision"):
+        if last_step.endswith("collision"):
             own_id = "light.subject_2"
-        elif last_page.startswith("discovery"):
+        elif last_step.startswith("discovery"):
             own_id = f"{member}_2"
         else:
             own_id = "light.subject"
@@ -8342,11 +8346,11 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
         hass.states.async_set(
             "light.keep", "off", {"entity_id": ["light.spare", added]}
         )
-    if last_page.endswith("selection"):
+    if last_step.endswith("selection"):
         user_input = {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
-    elif last_page.endswith("inside"):
+    elif last_step.endswith("inside"):
         user_input = {**settings_set, SECTION_STANDBY: {}}
-    elif last_page.endswith("collision"):
+    elif last_step.endswith("collision"):
         user_input = {"next_step_id": "entity_id_proceed"}
     else:
         user_input = {}
@@ -8358,7 +8362,7 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
         return
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {"base": "hold_entity_own"}
-    if last_page == "discovery_selection":
+    if last_step == "discovery_selection":
         assert result["step_id"] == "discover_light_defaults"
     else:
         assert result["step_id"] == (
@@ -8393,14 +8397,16 @@ async def test_a_light_entry_without_its_light_entity_keeps_its_lights(
         await hass.async_block_till_done()
     else:
         hall.add_to_hass(hass)
-    page = {
+    user_input = {
         **EMPTY_LIGHT_CREATE_SECTIONS,
         CONF_NAME: "Other",
         CONF_LIGHTS: ["light.hall_real"],
         CONF_LIGHT_TIMEOUT: 60,
     }
 
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], page)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input
+    )
     assert result["errors"] == {CONF_LIGHTS: "light_shared"}
     fresh = await _start_create(hass)
     fresh = await hass.config_entries.flow.async_configure(
@@ -8416,7 +8422,9 @@ async def test_a_light_entry_without_its_light_entity_keeps_its_lights(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
     )
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], page)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input
+    )
     assert result["type"] == FlowResultType.CREATE_ENTRY
 
 
@@ -8463,7 +8471,7 @@ async def _submit_wrap_form(
     *,
     first_page_only: bool = False,
 ) -> dict:
-    """Submit every page of a Den light form up to its save, or just the first."""
+    """Submit every step of a Den light form up to its save, or just the first."""
     options = "options" in form
     manager = hass.config_entries.options if options else hass.config_entries.flow
     advanced = {} if options else {SECTION_ADVANCED: {}}
@@ -8485,7 +8493,7 @@ async def _submit_wrap_form(
         return await manager.async_configure(
             result["flow_id"], {**EMPTY_INSIDE_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
         )
-    page = {
+    user_input = {
         **EMPTY_LIGHT_SECTIONS,
         **advanced,
         CONF_NAME: "Den",
@@ -8493,8 +8501,8 @@ async def _submit_wrap_form(
         CONF_LIGHT_TIMEOUT: 60,
     }
     if form.endswith("selection"):
-        page[SECTION_BEHAVIOR] = {CONF_TURN_ON_SELECT_ENTITY: "select.scene"}
-    result = await manager.async_configure(result["flow_id"], page)
+        user_input[SECTION_BEHAVIOR] = {CONF_TURN_ON_SELECT_ENTITY: "select.scene"}
+    result = await manager.async_configure(result["flow_id"], user_input)
     if first_page_only:
         return result
     if form.endswith("selection"):
@@ -8524,7 +8532,7 @@ async def _setup_wrap_test(hass: HomeAssistant, form: str) -> None:
 async def test_light_forms_point_out_a_wrapped_virtual_light(
     hass: HomeAssistant, form: str
 ) -> None:
-    """The page names the virtual light, after every other page, and saves
+    """The step names the virtual light, after every other step, and saves
     exactly what the same form saves for a real light."""
     await _setup_wrap_test(hass, form)
     options = "options" in form
@@ -8602,7 +8610,7 @@ async def test_light_create_points_out_a_wrapped_light_once(
     hass: HomeAssistant,
 ) -> None:
     """Going back from the Entity ID already exists step does not show the
-    page again."""
+    step again."""
     await _setup_wrap_test(hass, "create")
     hass.states.async_set("light.den", "off")
 
@@ -8631,9 +8639,9 @@ async def test_light_create_points_out_a_wrapped_light_once(
 async def test_wrapped_light_page_follows_a_light_changed_while_open(
     hass: HomeAssistant, form: str, change: str
 ) -> None:
-    """A wrapped light deleted behind the page is rejected as on any last page;
+    """A wrapped light deleted behind the step is rejected as on any last step;
     one whose entity ID changed is saved under the new one without the
-    page again."""
+    step again."""
     await _setup_wrap_test(hass, form)
     options = "options" in form
     result = await _open_wrap_form(hass, form)
@@ -8706,7 +8714,7 @@ async def test_light_forms_reject_a_group_holding_a_virtual_light(
 async def test_light_options_final_page_rejects_a_group_given_a_virtual_light(
     hass: HomeAssistant, form: str
 ) -> None:
-    """A group that came to hold a virtual light behind a later page is rejected."""
+    """A group that came to hold a virtual light behind a later step is rejected."""
     await _setup_wrap_test(hass, form)
     hass.states.async_set("light.lamp", "off")
     hass.states.async_set("light.living", "off", {"entity_id": ["light.lamp"]})
@@ -8728,7 +8736,7 @@ async def test_light_options_final_page_rejects_a_group_given_a_virtual_light(
             result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300}
         )
         assert result["step_id"] == "scheduled_light_inside"
-        last_page = {**EMPTY_INSIDE_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+        last_step = {**EMPTY_INSIDE_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
     else:
         result = await manager.async_configure(
             result["flow_id"],
@@ -8741,12 +8749,12 @@ async def test_light_options_final_page_rejects_a_group_given_a_virtual_light(
             },
         )
         assert result["step_id"] == "light_selection"
-        last_page = {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+        last_step = {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
 
     hass.states.async_set(
         "light.living", "off", {"entity_id": ["light.lamp", "light.other"]}
     )
-    result = await manager.async_configure(result["flow_id"], last_page)
+    result = await manager.async_configure(result["flow_id"], last_step)
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "light_group_virtual"
     assert entry_settings(den)[CONF_LIGHTS] == stored
@@ -8880,7 +8888,7 @@ def _light_entry_count(hass: HomeAssistant) -> int:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("last_page", ["defaults", "selection"])
+@pytest.mark.parametrize("last_step", ["defaults", "selection"])
 @pytest.mark.parametrize(
     ("picks", "edited", "members"),
     [
@@ -8894,9 +8902,9 @@ async def test_discovery_rechecks_picks_a_group_edit_made_overlap(
     picks: list[str],
     edited: str,
     members: list[str],
-    last_page: str,
+    last_step: str,
 ) -> None:
-    """A group edited behind a later page sends the flow back to the checklist."""
+    """A group edited behind a later step sends the flow back to the checklist."""
     _overlap_lights(hass)
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
     result = await _reach_discovery_select(hass, "discover_light")
@@ -8905,7 +8913,7 @@ async def test_discovery_rechecks_picks_a_group_edit_made_overlap(
     )
     assert result["step_id"] == "discover_light_defaults"
     defaults = dict(EMPTY_LIGHT_SECTIONS)
-    if last_page == "selection":
+    if last_step == "selection":
         defaults[SECTION_BEHAVIOR] = {CONF_TURN_ON_SELECT_ENTITY: "select.scene"}
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], defaults
@@ -8915,7 +8923,7 @@ async def test_discovery_rechecks_picks_a_group_edit_made_overlap(
     hass.states.async_set(edited, "off", {"entity_id": members})
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {CONF_TURN_ON_SELECT_OPTION: "Cozy"} if last_page == "selection" else defaults,
+        {CONF_TURN_ON_SELECT_OPTION: "Cozy"} if last_step == "selection" else defaults,
     )
     assert result["step_id"] == "discover_light_select"
     assert result["errors"] == {"base": "discovery_picks_overlap"}
@@ -9574,7 +9582,7 @@ async def test_light_options_final_page_rejects_timeout_raised_meanwhile(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, scheduled: bool
 ) -> None:
     """A light newly referencing a sensor does not reference it in storage yet, so the
-    sensor's occupancy timeout can be raised behind the light's last page: the save is
+    sensor's occupancy timeout can be raised behind the light's last step: the save is
     rejected with the timeout error on the referencing form."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
@@ -10048,7 +10056,7 @@ async def test_every_form_strips_the_name(
     )
 
     if form == "scheduled_light":
-        # The name is kept for the settings pages that follow.
+        # The name is kept for the settings steps that follow.
         assert result["step_id"] == "scheduled_light_outside"
         assert result["errors"] in (None, {})
         result = await manager.async_configure(
@@ -11004,7 +11012,7 @@ async def test_new_light_rejects_a_keep_on_group_naming_its_future_id(
     ]
 
     if "group.around" in excluded:
-        # Named on the first page, the Virtual Scheduled Light's entity ID is known
+        # Named on the first step, the Virtual Scheduled Light's entity ID is known
         # by now.
         assert form == "scheduled_create"
     else:

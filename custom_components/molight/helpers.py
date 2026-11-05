@@ -481,13 +481,13 @@ def light_descendants(
     return found
 
 
-def lights_commanded(
+def lights_controlled(
     hass: HomeAssistant, members: Sequence[str], lights: dict[str, ConfigEntry]
 ) -> set[str]:
-    """Return the lights that a virtual light with these members commands itself.
+    """Return the lights that a virtual light with these members controls itself.
 
     A light group stands for itself and the lights it contains; a virtual
-    light stands for itself alone, since it commands its own members.
+    light stands for itself alone, since it controls its own members.
     """
     found: set[str] = set()
     pending = list(members)
@@ -511,7 +511,7 @@ def group_leaves(
     """
     return {
         entity_id
-        for entity_id in lights_commanded(hass, [group_id], lights)
+        for entity_id in lights_controlled(hass, [group_id], lights)
         if entity_id in lights or not light_member_ids(hass, entity_id, lights)
     }
 
@@ -538,7 +538,7 @@ def light_owners(
     )
     owned: dict[str, str] = {}
     for name, entry in owners:
-        for light in lights_commanded(
+        for light in lights_controlled(
             hass, entry_settings(entry).get(CONF_LIGHTS, []), lights
         ):
             owned.setdefault(light, name)
@@ -552,15 +552,15 @@ def shared_lights(
     own_entry_id: str | None = None,
     owners: tuple[dict[str, ConfigEntry], dict[str, str]] | None = None,
 ) -> dict[str, str]:
-    """Return lights among these members that another virtual light commands.
+    """Return lights among these members that another virtual light controls.
 
     Maps each such light to its owner (see light_owners), which a caller
     checking many member lists computes once and passes in. Two virtual
-    lights commanding one light fight over it, so each light belongs to one;
+    lights controlling one light fight over it, so each light belongs to one;
     a light under a wrapped virtual light is that light's, not the wrapping light's.
     """
     lights, owned = owners or light_owners(hass, own_entry_id=own_entry_id)
-    mine = lights_commanded(hass, members, lights)
+    mine = lights_controlled(hass, members, lights)
     return {light: owned[light] for light in sorted(mine) if light in owned}
 
 

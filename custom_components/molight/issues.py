@@ -18,7 +18,7 @@ from .helpers import (
     VIRTUAL_LIGHT_TYPES,
     entry_settings,
     light_owners,
-    lights_commanded,
+    lights_controlled,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -68,10 +68,10 @@ def async_raise_issue(
 
 @callback
 def async_check_shared_members(hass: HomeAssistant) -> None:
-    """Raise one issue per light that two virtual lights command, and clear the rest.
+    """Raise one issue per light that two virtual lights control, and clear the rest.
 
-    A light belongs to the first virtual light by name that commands it
-    (see light_owners); every other one commanding it gets the issue,
+    A light belongs to the first virtual light by name that controls it
+    (see light_owners); every other one controlling it gets the issue,
     naming the owner. Run when a virtual light loads, unloads or is removed
     and when a member light group changes, so an issue clears as soon as
     the fight ends, whichever side ended it.
@@ -84,7 +84,7 @@ def async_check_shared_members(hass: HomeAssistant) -> None:
         if settings.get(CONF_ENTITY_TYPE) not in VIRTUAL_LIGHT_TYPES:
             continue
         name = names.get(entry.entry_id, entry.title)
-        for light in lights_commanded(hass, settings.get(CONF_LIGHTS, []), lights):
+        for light in lights_controlled(hass, settings.get(CONF_LIGHTS, []), lights):
             owner = owned.get(light)
             if owner is None or owner == name:
                 continue

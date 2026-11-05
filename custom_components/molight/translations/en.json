@@ -1906,11 +1906,11 @@
     },
     "light_member_cycle": {
       "title": "{entity} does not control {member}",
-      "description": "{member} includes {entity} itself, directly or through a light group inside it, so driving it would make the light command itself. Remove {member} from the lights in Configure and add its other lights directly."
+      "description": "{member} includes {entity} itself, directly or through a light group inside it, so driving it would make the light control itself. Remove {member} from the lights in Configure and add its other lights directly."
     },
     "light_shared_member": {
       "title": "{entity} and {other} both control {light}",
-      "description": "Two virtual lights commanding one light fight over it. Give {light} to one of them in Configure, and add that virtual light to the other instead."
+      "description": "Two virtual lights controlling one light fight over it. Give {light} to one of them in Configure, and add that virtual light to the other instead."
     },
     "occupancy_source_cycle": {
       "title": "{entity} is part of its own source",
