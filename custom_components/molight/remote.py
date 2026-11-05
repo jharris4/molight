@@ -24,10 +24,13 @@ of which only one may fire the binding:
     `double_press`.
   - Shelly Gen2+: `single_push` / `double_push` (btn_down/btn_up ignored).
   - Z-Wave central scene: `KeyPressed` / `KeyPressed2x`.
-  - Lutron Caséta buttons (event entities provided by the companion
-    lutron-caseta-events integration; HA's own lutron_caseta creates
-    none): single = `press` (`release` is ignored), double = `multi_tap`
-    where the bridge reports multi-taps.
+  - Lutron Caséta buttons through the companion lutron-caseta-events
+    integration: single = `press` (`release` is ignored), double =
+    `multi_tap` where the bridge reports multi-taps.
+  - Home Assistant's standard button events (ButtonEventType; Lutron Caséta
+    Picos and keypads from 2026.11): single = `press_start`, which also
+    starts a long press. `press_end`, the long-press and the multi-press
+    types never fire a binding, so no double click.
   - BTHome, Xiaomi BLE, SwitchBot, Govee BLE, native Lutron raise/lower:
     single = `press`, double = `double_press` where advertised.
   - Hue-style / Matter without MSM: `short_release` (preferred over
@@ -84,7 +87,8 @@ CLICK_DOUBLE = "double"
 
 # Event types announcing a completed click, in priority order: only the first
 # type a button advertises counts, so a multi-press button's short_release
-# never double-fires alongside its multi_press_1.
+# never double-fires alongside its multi_press_1. The last two fire when the
+# button goes down, so a release spelling wins where a button has both.
 _SINGLE_EVENT_TYPES = (
     "multi_press_1",
     "single",
@@ -94,6 +98,7 @@ _SINGLE_EVENT_TYPES = (
     "press",
     "short_release",
     "initial_press",
+    "press_start",
 )
 # multi_tap is how Lutron buttons re-exposed as event entities (the
 # lutron-caseta-events integration) spell a double click.
