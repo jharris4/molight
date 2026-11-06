@@ -113,7 +113,7 @@ Hysteresis:     10     # bright at 50lx, dark below 30lx; stops flapping
 Name:                   Living Room            # → light.living_room
 Lights to control:      light.living_lamps
 Turn-off timeout:       180
-Occupancy sensor:       binary_sensor.living_occupancy    # regular = turns on & off
+Occupancy sensor:       binary_sensor.living_occupancy    # turns on & off
 Maintain occupancy sensor: binary_sensor.living_presence  # only holds an on light on
 Illuminance sensor:     binary_sensor.living_dark_enough
 Illuminance mode:       Control   # dark gates turn-ons AND bright forces off

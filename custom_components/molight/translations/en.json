@@ -35,7 +35,7 @@
         "title": "Convert Virtual Scheduled Lights",
         "description": "Select one or more Virtual Scheduled Lights. The inside-schedule settings become the regular Virtual Light's settings. The schedule stays, with Schedule mode set to the Gate mode that matches At schedule end. Outside-schedule settings and any standby brightness will be discarded.",
         "data": {
-          "convert_lights": "Scheduled lights"
+          "convert_lights": "Virtual Scheduled Lights"
         },
         "data_description": {
           "convert_lights": "Each choice shows the light followed by the schedule it keeps."
@@ -127,7 +127,7 @@
       },
       "discover_occupancy_select": {
         "title": "Discover occupancy sensors",
-        "description": "Select the occupancy/motion/presence sensors to wrap in virtual occupancy sensors; the next step lets you adjust the defaults applied to all of them.",
+        "description": "Select the occupancy/motion/presence sensors to wrap in MoLight occupancy sensors; the next step lets you adjust the defaults applied to all of them.",
         "data": {
           "selected_entities": "Sensors to add",
           "affix_prefix": "Prefix",
@@ -363,14 +363,14 @@
       },
       "combined_occupancy": {
         "title": "Virtual Combined Occupancy Sensor",
-        "description": "Merges several virtual occupancy sensors into one signal, respecting each constituent's occupancy timeout.",
+        "description": "Merges several MoLight occupancy sensors into one signal, respecting each constituent's occupancy timeout.",
         "data": {
           "name": "Name",
           "trigger_sensors": "Trigger sensors",
           "maintain_sensors": "Maintain sensors"
         },
         "data_description": {
-          "trigger_sensors": "Virtual occupancy sensors that can start occupancy. Any one turning on starts it.",
+          "trigger_sensors": "MoLight occupancy sensors that can start occupancy. Any one turning on starts it.",
           "maintain_sensors": "Optional. Sensors that extend occupancy once started but can never start it, e.g. a sensitive mmWave sensor that would false-trigger on its own."
         },
         "sections": {
@@ -660,7 +660,7 @@
               "entity_id": "Entity ID"
             },
             "data_description": {
-              "entity_id": "Optional. Leave blank to derive it from the name. Fixed once created."
+              "entity_id": "Optional. Leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; change it later in Home Assistant's entity settings."
             }
           }
         }
@@ -891,7 +891,7 @@
       },
       "remote": {
         "title": "Virtual Remote",
-        "description": "Drive lights with any remote whose buttons appear as event entities (an IKEA Bilresa, a Hue dimmer, ...); Lutron Caséta Picos need the lutron-caseta-events integration. Bind single or double clicks to actions; which clicks a button supports is read from the button itself. Clicks count as manual control on a virtual light: never gated, and they cancel a running off warning sequence.",
+        "description": "Drive lights with any remote whose buttons appear as event entities (an IKEA Bilresa, a Hue dimmer, a Lutron Caséta Pico from Home Assistant 2026.11 with single clicks only, or through the lutron-caseta-events integration on any version with double clicks too). Bind single or double clicks to actions; which clicks a button supports is read from the button itself. Clicks count as manual control on a virtual light: never gated, and they cancel a running off warning sequence.",
         "data": {
           "name": "Name",
           "target_lights": "Lights to control",
@@ -1472,14 +1472,14 @@
       },
       "combined_occupancy": {
         "title": "Virtual Combined Occupancy Sensor",
-        "description": "Merges several virtual occupancy sensors into one signal, respecting each constituent's occupancy timeout.",
+        "description": "Merges several MoLight occupancy sensors into one signal, respecting each constituent's occupancy timeout.",
         "data": {
           "name": "Name",
           "trigger_sensors": "Trigger sensors",
           "maintain_sensors": "Maintain sensors"
         },
         "data_description": {
-          "trigger_sensors": "Virtual occupancy sensors that can start occupancy. Any one turning on starts it.",
+          "trigger_sensors": "MoLight occupancy sensors that can start occupancy. Any one turning on starts it.",
           "maintain_sensors": "Optional. Sensors that extend occupancy once started but can never start it, e.g. a sensitive mmWave sensor that would false-trigger on its own."
         }
       },

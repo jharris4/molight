@@ -33,7 +33,7 @@ Each of these is a *virtual entity*: it stands in front of real devices (sensors
 - Optional [off warning sequence](https://github.com/jharris4/molight/blob/main/REFERENCE.md#off-warning-sequence): blink, dim or recolor the lights before an automatic turn-off, with time to re-trigger them, instead of sudden darkness.
 - Every virtual light gets a companion **Auto-off switch**, and any on/off entity (guest mode, movie night) can be a **keep-on entity** that suspends automatic turn-offs (see [Holding auto-off](https://github.com/jharris4/molight/blob/main/REFERENCE.md#holding-auto-off)). A virtual light can also [control other virtual lights](https://github.com/jharris4/molight/blob/main/REFERENCE.md#wrapping-another-virtual-light).
 - Every virtual light and occupancy sensor gets a companion **Events entity** saying what it last did and why: an on or off and its reason, an effect or warn stage with the seconds left, a blocked turn-on, a physical dim, a false detection. A spoken off warning or a "why did it turn off" notification is one Event received trigger on it (see [Events](https://github.com/jharris4/molight/blob/main/REFERENCE.md#events)).
-- [Restarts and `unavailable` sources](https://github.com/jharris4/molight/blob/main/REFERENCE.md#restarts-and-unavailability) are handled everywhere: missed follow-mode and Virtual Scheduled Light boundaries are applied exactly once, a sensor that is briefly `unavailable` is never misread as a state change, and a dead motion or door sensor can't hold lights on forever.
+- [Restarts and `unavailable` sources](https://github.com/jharris4/molight/blob/main/REFERENCE.md#restarts-and-unavailability) are handled everywhere: missed follow-mode and Virtual Scheduled Light boundaries are applied exactly once, a sensor that is briefly `unavailable` is never misread as a state change, and a dead motion or door sensor can't hold lights on forever. A follow-mode light can also [match its schedule after a restart](https://github.com/jharris4/molight/blob/main/REFERENCE.md#schedule-modes): turned on when found off inside its schedule window, or off when found on outside it.
 - [Virtual Remotes](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-remote) replace hand-written button automations: map single/double clicks of any remote whose buttons appear as `event` entities (IKEA Bilresa, Hue dimmer, Lutron Picos, and others; Hue buttons have single clicks only) to on/off/toggle/dim/preset actions, with single and double clicks resolved from the event types each button has.
 
 ## Installation
@@ -64,7 +64,7 @@ Everything is configured from the UI, with no YAML. Adding an entry (the first v
 The usual order:
 
 1. Create the MoLight **sensors** you want lights to react to (all optional): an occupancy sensor per real motion/presence sensor, a combined sensor to merge several, an illuminance sensor, a schedule sensor. When you create an occupancy sensor, take care to set its **occupancy timeout** to match the real sensor's own hold time. Everything downstream depends on it, and MoLight can't read it for you (see [the note in the reference](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-occupancy-sensor)).
-2. Create a **Virtual Light** per room or light group, with the real `light` entities as its member lights, referencing any of the sensors from step 1. Use a **Virtual Scheduled Light** instead when every setting may differ inside and outside a schedule. A virtual light with no sensors is still useful: it turns its lights off on a timer.
+2. Create a **Virtual Light** per room or light group, with the real `light` entities as its member lights, referencing any of the sensors from step 1. Use a **Virtual Scheduled Light** instead when every setting may differ inside and outside a schedule. A virtual light with no sensors is still useful: it turns its lights off on a timer. Leave the turn-off timeout blank for a light that should stay on until turned off manually, by a false detection or by a schedule window end (see [No turn-off timeout](https://github.com/jharris4/molight/blob/main/REFERENCE.md#no-turn-off-timeout)).
 3. Optionally create a **Virtual Remote** entry per remote to drive lights from its buttons (see [Virtual Remote](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-remote)).
 4. Use the virtual light in dashboards and voice assistants instead of the real lights.
 
@@ -116,7 +116,7 @@ The three **Discover** actions scan your existing entities and create a virtual 
 
 Each starts with an optional discovery filter: pick **areas** and/or **labels** to narrow the scan (an entity matches through its own assignment or its device's; with both filters set, an entity must match an area *and* carry a label), and choose whether the checklist starts with everything **pre-selected** (bulk-add, the default) or empty (handy when you only want a few). Leave the filters blank to see everything.
 
-The next form shows the checklist of matching entities. Only useful candidates appear: MoLight's own entities, disabled entities, anything already wrapped, and light groups that contain a virtual light are hidden, so re-running discovery later only offers what's new. Each pick becomes its own virtual light, so two picks that control the same light, such as a light and a light group that contains it, are rejected; a light group whose lights are already ticked starts unticked.
+The next form shows the checklist of matching entities. Only useful candidates appear: MoLight's own entities, disabled entities, anything already wrapped, and light groups that contain a virtual light are hidden, so re-running discovery later only offers what's new. In **Discover lights**, each pick becomes its own virtual light, so two picks that control the same light, such as a light and a light group that contains it, are rejected; a light group whose lights are already ticked starts unticked.
 
 An optional **prefix**/**suffix** distinguishes the virtual entities from the real ones, applied verbatim to the source's friendly name (you control the spacing), and **Apply prefix/suffix to** chooses what gets it:
 
@@ -132,7 +132,7 @@ A final form then lets you adjust the default settings applied to every pick; fo
 
 **Assign a sensor to several lights** assigns one shared sensor to many regular Virtual Lights in a single pass. Pick the kind of sensor, the sensor, and how the lights should use it:
 
-- **Occupancy**, with a **role**: *regular* (turns lights on and off) or *maintain* (only holds an already-on light on).
+- **Occupancy**, with a **role**: *occupancy* (turns lights on and off) or *maintain* (only holds an already-on light on).
 - **Illuminance**, with its **mode** (**Control** or **Gate only**).
 - **Schedule**, with its **mode** (**Follow**, **Gate and turn off**, **Gate and switch state**, or **Gate and keep state**).
 
@@ -157,7 +157,7 @@ Follow-mode regular Virtual Lights are not offered for conversion because their 
 
 ## Troubleshooting
 
-MoLight writes no debug logs. A setting it cannot act on is raised as a **Repairs** issue (**Settings → System → Repairs**) when the entry loads, and logged as a warning:
+MoLight logs warnings and errors; only a turn-on selection warning repeated for the same problem drops to the debug log until a selection applies again (see [Turn-on selection](https://github.com/jharris4/molight/blob/main/REFERENCE.md#turn-on-selection)). A setting it cannot act on is raised as a **Repairs** issue (**Settings → System → Repairs**) when the entry loads, and logged as a warning:
 
 - a Virtual Scheduled Light with no schedule;
 - a combined schedule that includes itself;

@@ -483,7 +483,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
             continue
         cfg = entry_settings(other)
         # The occupancy and illuminance keys also name a sensor entry's own source,
-        # which is never a MoLight entity; clean them up on lights only.
+        # which is never a virtual entity; clean them up on lights only.
         keys = _REFERENCE_KEYS if _is_virtual_light(other) else (CONF_SCHEDULE_SOURCE,)
         cleaned = _remap_references(
             cfg, dict.fromkeys(removed), keys, _REFERENCE_LIST_KEYS

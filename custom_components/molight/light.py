@@ -96,7 +96,7 @@ Occupancy turn-on by the light's own system (occupancy_turn_on)
     lit by occupancy, last_on_occupancy, turned_on with reason occupancy),
     and skips the gates. The auto-on brightness, color and selection follow
     at the wait's end. MoLight never turns the light on for occupancy, also
-    not when it re-checks presence (startup, a settings or gate window start, dark).
+    not when it re-checks presence (startup, a settings or gate-mode window start, dark).
   - own_system_then_molight: as own_system, and at the wait's end an idle
     light is turned on the normal, gated way; re-checks turn it on as usual.
   - Standby and follow windows behave as with molight. The wait is not saved.
@@ -181,7 +181,7 @@ illuminance_mode:
     presence was holding (whoever held it was there until then at least); an
     off warning sequence or standby leaves none. An on-period ended any other
     way (manual off, timer, schedule) is never resumed, nor is one that the person
-    turned off, or whose gate window ended, while going bright had it off.
+    turned off, or whose gate-mode window ended, while going bright had it off.
   - Illuminance OFF→ON (dark→bright):
       Control:    go IDLE, turn lights off.
       Gate only:  no effect; bright never turns lights off. Use when the lux
@@ -235,7 +235,7 @@ Schedule handling (when a schedule sensor is configured), per schedule_mode:
 Door handling (when a door sensor is configured), per door_mode:
   Opening the door (state on) is a turn-on trigger, gated by illuminance and
   a gate-mode schedule exactly like occupancy: it only lights the room when
-  it is dark (if an illuminance sensor is set) and inside a gate window.
+  it is dark (if an illuminance sensor is set) and inside a gate-mode window.
   - On open:      opening turns the lights on with the turn-off timer (ACTIVE);
     the door is otherwise ignored, so closing does nothing and the
     timer finishes even if the door stays open. A momentary trigger.
@@ -3782,7 +3782,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         Automatic turn-offs suppressed while held are applied: a follow or
         Gate and turn off window that ended while held, or bright in control mode,
         turns the lights off now; an active follow window or being occupied
-        (gated like any adoption: suppressed outside a gate window) keeps them
+        (gated like any adoption: suppressed outside a gate-mode window) keeps them
         on without a timer; otherwise a fresh timer starts, also outside
         a window that did not end while held. A turn-on still waiting for its
         selection counts as on.
