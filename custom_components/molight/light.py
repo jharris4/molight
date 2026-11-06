@@ -96,7 +96,8 @@ Occupancy turn-on by the light's own system (occupancy_turn_on)
     lit by occupancy, last_on_occupancy, turned_on with reason occupancy),
     and skips the gates. The auto-on brightness, color and selection follow
     at the wait's end. MoLight never turns the light on for occupancy, also
-    not when it re-checks presence (startup, a settings or gate-mode window start, dark).
+    not when it re-checks presence (startup, a settings or gate-mode window
+    start, dark).
   - own_system_then_molight: as own_system, and at the wait's end an idle
     light is turned on the normal, gated way; re-checks turn it on as usual.
   - Standby and follow windows behave as with molight. The wait is not saved.
