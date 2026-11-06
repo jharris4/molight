@@ -1536,6 +1536,7 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
         self._unsub_next_change = None
         self._source_cycle = False
         self._cycle_issue: str | None = None
+        self._windows_issue: str | None = None
         # What the source is computed from, watched for coming to include it.
         self._inputs: set[str] = set()
         self._inputs_unsub: CALLBACK_TYPE | None = None
@@ -1603,20 +1604,32 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
                     EVENT_CORE_CONFIG_UPDATE, self._handle_core_config_update
                 )
             )
-            # The form rejects these; one saved before it did stays off.
-            if not all(window_ever_opens(self.hass, w) for w in self._windows):
-                _LOGGER.warning(
-                    "Schedule %s has a window that never opens at this home "
-                    "location: its end always comes before its start",
-                    self._attr_name,
-                )
-                async_raise_issue(
-                    self.hass,
-                    self._entry_id,
-                    ISSUE_SCHEDULE_WINDOW_NEVER_OPENS,
-                    {"entity": self.entity_id},
-                )
+            self._check_windows_open()
             self._refresh()
+
+    @callback
+    def _check_windows_open(self) -> None:
+        """Raise an issue while a window never opens at the home location.
+
+        The form rejects these; one saved before it did stays off. A home
+        location change can break a window, or fix one.
+        """
+        opens = all(window_ever_opens(self.hass, w) for w in self._windows)
+        if not opens and self._windows_issue is None:
+            _LOGGER.warning(
+                "Schedule %s has a window that never opens at this home "
+                "location: its end always comes before its start",
+                self._attr_name,
+            )
+            self._windows_issue = async_raise_issue(
+                self.hass,
+                self._entry_id,
+                ISSUE_SCHEDULE_WINDOW_NEVER_OPENS,
+                {"entity": self.entity_id},
+            )
+        elif opens and self._windows_issue is not None:
+            async_clear_issue(self.hass, self._windows_issue)
+            self._windows_issue = None
 
     def _saved_invert_matches(self, saved: dict) -> bool:
         """Return whether the saved marker was made under the current invert setting."""
@@ -1630,6 +1643,7 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
 
     @callback
     def _handle_core_config_update(self, _event: Event) -> None:
+        self._check_windows_open()
         self._refresh(moved=True)
 
     @callback

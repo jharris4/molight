@@ -2292,6 +2292,27 @@ async def test_saved_window_that_never_opens_is_logged_at_setup(
     )
 
 
+@pytest.mark.asyncio
+@pytest.mark.allow_warning_log
+async def test_window_that_never_opens_is_judged_again_when_the_home_moves(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A home location change can fix a window that never opened, or break
+    one that did, and the issue follows it."""
+    tz = await set_home(hass, *LONDON)
+    freezer.move_to(_local(tz, "2026-06-22 12:00"))
+    entry = _schedule_entry([{"start": _SUNRISE, "end": _at("01:00")}])
+    await _setup(hass, entry)
+    issue = {"schedule_window_never_opens": {"entity": NIGHT}}
+    assert molight_issues(hass, entry.entry_id) == issue
+
+    await _update_config(hass, latitude=TROMSO[1], longitude=TROMSO[2])
+    assert molight_issues(hass, entry.entry_id) == {}
+
+    await _update_config(hass, latitude=LONDON[1], longitude=LONDON[2])
+    assert molight_issues(hass, entry.entry_id) == issue
+
+
 # ---------------------------------------------------------------------------
 # A binary sensor schedule unloaded while Home Assistant keeps running
 # ---------------------------------------------------------------------------
