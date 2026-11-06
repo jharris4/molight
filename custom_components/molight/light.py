@@ -955,14 +955,19 @@ class _Owed:
     end_switch: bool = False
     # Marker of the follow window whose end was missed.
     window: str | None = None
+    # The restart matches the schedule outside its window: a member found lit is
+    # turned off.
+    outside: bool = False
     # The pre-warning brightness and color of an interrupted warning.
     look: tuple[int | None, dict | None] | None = None
     # Each member's own pre-warning look, as _pre_warn_members.
     member_looks: dict[str, _Look | None] = field(default_factory=dict)
 
     def ends(self) -> bool:
-        """Return True while a missed schedule end is owed."""
-        return self.end_off or self.end_switch or self.window is not None
+        """Return True while an off is owed: a missed end, or the match outside."""
+        return (
+            self.end_off or self.end_switch or self.window is not None or self.outside
+        )
 
 
 @dataclass(frozen=True)
@@ -2077,6 +2082,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             end_off=end_off and off,
             end_switch=end_switch and off,
             window=window if off and self._schedule_window_applied is None else None,
+            outside=off and self._restart_matches_outside(),
             look=look,
             member_looks=member_looks,
         )
@@ -2340,12 +2346,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self.async_write_ha_state()
             return True
 
-        if (
-            self._attr_is_on
-            and self._early_command is None
-            and not self._held
-            and self._matches_after_restart(inside=False)
-        ):
+        if self._attr_is_on and self._restart_matches_outside():
             # Found on outside the window: the restart matches the schedule.
             self._send_event(EVENT_TURNED_OFF, reason=REASON_STARTUP, standby=False)
             self.hass.async_create_task(self._auto_lights_off())
@@ -2353,6 +2354,23 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             return True
 
         return False
+
+    def _restart_matches_outside(self) -> bool:
+        """Return True when a restart turns off a light found on outside its window.
+
+        Judged at the seed and again when a member unreadable then reports lit.
+        """
+        if not self._schedule_sensor or self._schedule_mode != SCHEDULE_MODE_FOLLOW:
+            return False
+        sched = self.hass.states.get(self._schedule_sensor)
+        return (
+            sched is not None
+            and sched.state == "off"
+            and self._schedule_window_applied is None
+            and self._early_command is None
+            and not self._held
+            and self._matches_after_restart(inside=False)
+        )
 
     def _matches_after_restart(self, *, inside: bool) -> bool:
         """Return True when a restart matches the schedule, inside or outside it."""
@@ -2971,7 +2989,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         owed = self._owed
         if owed is None or not owed.ends():
             return
-        owed.end_off = owed.end_switch = False
+        owed.end_off = owed.end_switch = owed.outside = False
         owed.window = None
         if owed.look is None:
             self._owed = None

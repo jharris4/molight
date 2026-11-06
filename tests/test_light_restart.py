@@ -1187,6 +1187,38 @@ async def test_restart_outside_window_found_on_follows_the_match_choice(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("late", ["missing", "placeholder"])
+@pytest.mark.parametrize(
+    ("choice", "off"),
+    [(AS_FOUND, False), (INSIDE, False), (OUTSIDE, True), (BOTH, True)],
+)
+async def test_restart_outside_window_member_first_seen_lit_follows_the_match_choice(
+    hass: HomeAssistant, choice: str, off: bool, late: str
+) -> None:
+    """A member unreadable at the seed that reports lit later is judged as the
+    seed would have judged it: turned off only when the choice matches the
+    schedule outside its window, adopted with a timer otherwise."""
+    hass.states.async_set(SCHED, "off")
+    if late == "placeholder":
+        hass.states.async_set(REAL, "unavailable", {"restored": True})
+    calls = record_service_calls(hass)
+    await setup_entries(hass, _match_entry(choice))
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+
+    assert light_targets(calls, "turn_off") == ([[REAL]] if off else [])
+    state = _state(hass)
+    assert state.state == ("off" if off else "on")
+    assert state.attributes["molight_state"] == (STATE_IDLE if off else STATE_ACTIVE)
+    if off:
+        assert _last_event(hass) == (EVENT_TURNED_OFF, REASON_STARTUP)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize(("choice", "on"), [(AS_FOUND, False), (INSIDE, True)])
 async def test_real_restart_after_a_manual_off_in_the_window(
     hass: HomeAssistant, choice: str, on: bool
