@@ -373,6 +373,7 @@ async def test_an_unreadable_member_at_a_restart_settles_the_on_period(
     hass.states.async_set(REAL, "on", {"brightness": 200})
     await settle(hass)
     del records[:]
+    last_on_physical = hass.states.get(VIRTUAL).attributes["last_on_physical"]
     await _unload_and_switch_off(hass, entry, "unavailable")
     await restart_entries(hass, entry)
     assert hass.states.get(VIRTUAL).state == "off"
@@ -385,7 +386,10 @@ async def test_an_unreadable_member_at_a_restart_settles_the_on_period(
     if late == "off":
         assert records[1:] == [_turned_off(REASON_STARTUP)]
     else:
-        assert EVENT_TURNED_OFF not in [r["event_type"] for r in records]
+        # Adopted as the seed would have: no turn-on, by nobody.
+        assert records[1:] == []
+        attributes = hass.states.get(VIRTUAL).attributes
+        assert attributes["last_on_physical"] == last_on_physical
 
 
 @pytest.mark.asyncio

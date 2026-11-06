@@ -2673,6 +2673,11 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 # Mirror the real light's color on the off→on adoption edge,
                 # like the brightness mirror in _on_light_state_change.
                 self._set_color_state(*color)
+            # A member first seen lit after a restart is adopted as the seed
+            # would have adopted it: nobody is known to have turned it on.
+            startup_sighting = member_recovered and not member_rebooted
+            if startup_sighting and lit:
+                self._restored_on = False
             self._on_light_state_change(
                 new_state.state,
                 new_state.attributes.get("brightness"),
@@ -2681,7 +2686,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 manual=by_person and not member_recovered,
                 claim=claim and by_person,
                 touched=entity_id,
-                send_turned_on=claim,
+                send_turned_on=claim and not startup_sighting,
                 by_person=by_person,
             )
             return
@@ -3044,7 +3049,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     selection=None,
                 )
             if claim:
-                self._last_on_physical = datetime.now(UTC)
+                if send_turned_on:
+                    self._last_on_physical = datetime.now(UTC)
                 self._claim_on_period()
             if touched is not None and self._in_warning():
                 self._restore_untouched(touched)

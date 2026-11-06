@@ -457,6 +457,7 @@ async def test_physically_switched_light_adoption(
     hass: HomeAssistant, light_entry: MockConfigEntry, freezer
 ) -> None:
     """A physically switched real light is adopted and released."""
+    hass.states.async_set("light.living_room", "off")
     light_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(light_entry.entry_id)
     await hass.async_block_till_done()
