@@ -83,6 +83,8 @@ def async_check_shared_members(hass: HomeAssistant) -> None:
         settings = entry_settings(entry)
         if settings.get(CONF_ENTITY_TYPE) not in VIRTUAL_LIGHT_TYPES:
             continue
+        if entry.disabled_by is not None:  # a disabled light controls nothing
+            continue
         name = names.get(entry.entry_id, entry.title)
         for light in lights_controlled(hass, settings.get(CONF_LIGHTS, []), lights):
             owner = owned.get(light)

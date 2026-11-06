@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+from homeassistant.config_entries import ConfigEntryDisabler
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.molight.const import (
@@ -133,6 +134,41 @@ async def test_a_shared_light_issue_clears_when_either_light_gives_it_up(
     await settle(hass)
 
     assert molight_issues(hass, room.entry_id) == {}
+    assert molight_issues(hass, other.entry_id) == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.allow_warning_log
+@pytest.mark.parametrize("disabled", ["owner", "named"])
+async def test_a_disabled_light_neither_shares_nor_is_told_it_does(
+    hass: HomeAssistant, disabled: str
+) -> None:
+    """A disabled light does not fight over a shared light: disabling either
+    side clears the issue, and it does not come back on the next check until
+    the light is enabled again."""
+    hass.states.async_set(REAL, "off")
+    room = make_light_entry(name="Room", lights=[REAL])
+    other = make_light_entry(name="Other", lights=[REAL])
+    await setup_entries(hass, room, other)
+    await settle(hass)
+    assert molight_issues(hass, room.entry_id) == _shared("light.room", "light.other")
+
+    entry = other if disabled == "owner" else room
+    survivor = room if disabled == "owner" else other
+    await hass.config_entries.async_set_disabled_by(
+        entry.entry_id, ConfigEntryDisabler.USER
+    )
+    await settle(hass)
+    await hass.config_entries.async_reload(survivor.entry_id)
+    await settle(hass)
+
+    assert molight_issues(hass, room.entry_id) == {}
+    assert molight_issues(hass, other.entry_id) == {}
+
+    await hass.config_entries.async_set_disabled_by(entry.entry_id, None)
+    await settle(hass)
+
+    assert molight_issues(hass, room.entry_id) == _shared("light.room", "light.other")
     assert molight_issues(hass, other.entry_id) == {}
 
 

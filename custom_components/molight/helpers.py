@@ -523,6 +523,7 @@ def light_owners(
 
     An owner is named by its light's entity ID, or its entry's title while it
     has no light entity; the first owner by name wins a member light that two share.
+    A disabled light owns nothing.
     """
     lights = virtual_light_entries(hass, VIRTUAL_LIGHT_TYPES)
     names = {entry.entry_id: entity_id for entity_id, entry in lights.items()}
@@ -533,6 +534,7 @@ def light_owners(
             for entry in hass.config_entries.async_entries(DOMAIN)
             if entry_settings(entry).get(CONF_ENTITY_TYPE) in VIRTUAL_LIGHT_TYPES
             and entry.entry_id != own_entry_id
+            and entry.disabled_by is None
         ),
         key=lambda owner: owner[0],
     )
