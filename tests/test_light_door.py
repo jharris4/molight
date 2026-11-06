@@ -806,7 +806,7 @@ async def test_on_open_occupancy_holds_after_trigger(
 async def test_reopen_mid_warning_retriggers(hass: HomeAssistant, freezer) -> None:
     """Re-opening mid-warning undoes the warning like any re-trigger."""
     entry = make_light_entry(
-        door=DOOR, door_mode=DOOR_MODE_OPEN, effect_timeout=10, effect_brightness=0
+        door=DOOR, door_mode=DOOR_MODE_OPEN, effect_duration=10, effect_brightness=0
     )
     await setup_entries(hass, entry)
 
@@ -1018,9 +1018,9 @@ async def test_open_close_close_mid_warning_lets_it_finish(
         door=DOOR,
         door_mode=DOOR_MODE_OPEN_CLOSE,
         illuminance=ILLUM,
-        effect_timeout=10,
+        effect_duration=10,
         effect_brightness=0,
-        warn_timeout=15,
+        warn_duration=15,
     )
     hass.states.async_set(ILLUM, "on")  # bright
     await setup_entries(hass, entry)

@@ -252,7 +252,7 @@ async def test_dark_mid_warning_adopts_occupancy_and_restores(
     await setup_entries(
         hass,
         make_light_entry(
-            occupancy=OCC, illuminance=ILLUM, effect_timeout=10, warn_timeout=20
+            occupancy=OCC, illuminance=ILLUM, effect_duration=10, warn_duration=20
         ),
     )
     hass.states.async_set(ILLUM, "on")  # bright
@@ -327,7 +327,7 @@ async def test_gate_only_mode_occupancy_cancels_a_warning_while_bright(
             occupancy=OCC,
             illuminance=ILLUM,
             illuminance_mode=ILLUMINANCE_MODE_GATE_ONLY,
-            warn_timeout=60,
+            warn_duration=60,
             warn_brightness=50,
         ),
     )
@@ -479,7 +479,7 @@ async def test_false_detection_does_not_shorten_a_fresh_timer(
         keep_on_entities=[KEEP_ON],
         timeout=60,
         false_off_delay=5,
-        warn_timeout=10 if warned else None,
+        warn_duration=10 if warned else None,
         warn_brightness=10 if warned else None,
     )
     await setup_entries(hass, entry)

@@ -107,7 +107,7 @@ async def test_the_inner_timer_off_is_wrapped(hass, freezer) -> None:
 async def test_the_inner_warn_dim_fires_nothing_at_the_outer(hass, freezer) -> None:
     """A stage that only dims the inner is mirrored, not an event."""
     inner = make_light_entry(
-        name="Inner", lights=[REAL], timeout=100, warn_timeout=50, warn_brightness=20
+        name="Inner", lights=[REAL], timeout=100, warn_duration=50, warn_brightness=20
     )
     await _nested(hass, "regular", inner=inner)
     records = await _lit_virtually(hass, 200)

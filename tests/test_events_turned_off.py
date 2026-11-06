@@ -337,7 +337,7 @@ async def test_a_restart_mid_warning_finding_the_lights_off_ends_the_on_period(
     """Landing mid-warning with the lights off is the same end, not a
     cancelled warning."""
     entry = make_light_entry(
-        name="Hall", timeout=60, occupancy=OCC, warn_timeout=15, warn_brightness=100
+        name="Hall", timeout=60, occupancy=OCC, warn_duration=15, warn_brightness=100
     )
     records = await _setup(hass, entry, binary_sensor__occ="off")
     hass.states.async_set(OCC, "on")

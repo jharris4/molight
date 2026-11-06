@@ -267,7 +267,7 @@ async def test_a_warn_stage_does_not_enter_a_new_cycle(
             name="Cycle Light",
             lights=[GROUP],
             timeout=60,
-            warn_timeout=30,
+            warn_duration=30,
             warn_brightness=20,
         ),
     )

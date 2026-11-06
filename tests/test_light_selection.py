@@ -613,7 +613,7 @@ async def test_selection_reapplied_when_turning_on_during_a_blink_off(
     hass.states.async_set("light.ambient", "off")
     await setup_entries(
         hass,
-        _selection_entry(effect_timeout=10, effect_brightness=0, warn_timeout=30),
+        _selection_entry(effect_duration=10, effect_brightness=0, warn_duration=30),
     )
 
     await hass.services.async_call(
@@ -801,7 +801,7 @@ async def test_virtual_on_during_blink_off_survives_the_stage_ending(
     hass.states.async_set("light.ambient", "off")
     await setup_entries(
         hass,
-        _selection_entry(effect_timeout=5, effect_brightness=0, warn_timeout=30),
+        _selection_entry(effect_duration=5, effect_brightness=0, warn_duration=30),
     )
     turn_on = hass.async_create_task(
         hass.services.async_call(
@@ -1935,7 +1935,7 @@ async def test_script_stopped_during_a_blink_leaves_the_warning_running(
     lamp = FadingLight("ambient", brightness=200)
     await add_real(hass, lamp)
     await setup_entries(
-        hass, _selection_entry(timeout=5, effect_timeout=8, effect_brightness=0)
+        hass, _selection_entry(timeout=5, effect_duration=8, effect_brightness=0)
     )
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
@@ -2703,8 +2703,10 @@ async def test_resend_waiting_into_a_stage_sends_the_stage(
     stage sends that stage, not the brightness the light had before, and the
     warning runs on to the off."""
     select = _SlowSelect(hass)
-    stages = {"effect_timeout": 5, "effect_brightness": 20} if stage == "effect" else {}
-    await _lit_light(hass, select, warn_timeout=10, warn_brightness=20, **stages)
+    stages = (
+        {"effect_duration": 5, "effect_brightness": 20} if stage == "effect" else {}
+    )
+    await _lit_light(hass, select, warn_duration=10, warn_brightness=20, **stages)
     await _pass(hass, freezer, 57)
     await _park_resend(hass, select)
     commands = _light_commands(hass)
@@ -2736,7 +2738,7 @@ async def test_resend_waiting_into_a_blink_off_does_not_turn_it_on(
     """A stage that blinks the lights off is sent again as an off."""
     select = _SlowSelect(hass)
     await _lit_light(
-        hass, select, effect_timeout=5, effect_brightness=0, warn_timeout=10
+        hass, select, effect_duration=5, effect_brightness=0, warn_duration=10
     )
     await _pass(hass, freezer, 57)
     await _park_resend(hass, select)
@@ -2764,7 +2766,7 @@ async def test_resend_waiting_into_a_stage_sends_the_stage_color(
     select = _SlowSelect(hass)
     color = {"warn_rgb_color": [255, 0, 0]} if stage_color else {}
     await _lit_light(
-        hass, select, kelvin=3000, warn_timeout=10, warn_brightness=20, **color
+        hass, select, kelvin=3000, warn_duration=10, warn_brightness=20, **color
     )
     await _pass(hass, freezer, 57)
     await _park_resend(hass, select)
@@ -2794,9 +2796,9 @@ async def test_resend_started_in_a_stage_sends_the_stage_reached_since(
     await _lit_light(
         hass,
         select,
-        effect_timeout=5,
+        effect_duration=5,
         effect_brightness=20,
-        warn_timeout=10,
+        warn_duration=10,
         warn_brightness=40,
     )
     await _pass(hass, freezer, 61)
@@ -2826,7 +2828,7 @@ async def test_resend_started_in_a_stage_follows_how_the_stage_ends(
     waits. It sends the warning if that still shows, the brightness restored
     if occupancy ended the warning meanwhile, and nothing after the off."""
     select = _SlowSelect(hass)
-    await _lit_light(hass, select, warn_timeout=5, warn_brightness=20)
+    await _lit_light(hass, select, warn_duration=5, warn_brightness=20)
     await _pass(hass, freezer, 61)
     await settle(hass)
     assert _molight_state(hass) == "warn"
@@ -2871,7 +2873,7 @@ async def test_select_on_device_during_a_resend_into_a_stage_keeps_the_warning(
     brightness is sent over the preset's."""
     _one_device(hass, "select.ambient_theme", "light.ambient")
     select = _SlowSelect(hass)
-    await _lit_light(hass, select, warn_timeout=10, warn_brightness=20)
+    await _lit_light(hass, select, warn_duration=10, warn_brightness=20)
     await _pass(hass, freezer, 57)
     await _park_resend(hass, select)
     commands = _light_commands(hass)
@@ -2903,7 +2905,7 @@ async def test_automatic_turn_on_waiting_into_a_stage_sends_the_stage(
         hass,
         auto_on_brightness=40,
         false_off_delay=5,
-        warn_timeout=10,
+        warn_duration=10,
         warn_brightness=20,
     )
     commands = _light_commands(hass)
@@ -3286,9 +3288,9 @@ async def test_command_sent_during_a_replaced_select_call_outlasts_its_preset(
     stage the timer then reaches is sent during the call too, and may blink
     the lights off. Whichever was sent last is what the strip shows once the
     preset has landed."""
-    stage = {"warn_timeout": 8, "warn_brightness": 20}
+    stage = {"warn_duration": 8, "warn_brightness": 20}
     if command == "blink":
-        stage = {"effect_timeout": 8, "effect_brightness": 0}
+        stage = {"effect_duration": 8, "effect_brightness": 0}
     light, other, select = await _lit_pair(hass, timeout=5, **stage)
     if command == "restore":
         await _pass(hass, freezer, 6)
@@ -3409,7 +3411,7 @@ async def test_stage_after_a_physical_change_during_a_select_call_is_sent_again(
     """What the physical change has set stands, but a stage that the timer reaches
     afterwards, still during the call, is the light's own command again."""
     light, other, select = await _lit_pair(
-        hass, timeout=5, warn_timeout=8, warn_brightness=20
+        hass, timeout=5, warn_duration=8, warn_brightness=20
     )
     await _park_real_resend(hass, light, select)
     other.physical_change(brightness=150)
@@ -3600,9 +3602,9 @@ async def test_torn_down_light_sends_nothing_once_its_select_call_ends(
     """A new brightness or a stage sent during a select call is sent again when
     the call ends, but not by a light that was unloaded, reloaded, disabled
     or removed meanwhile: a physical off after that stands."""
-    stage = {"warn_timeout": 8, "warn_brightness": 20}
+    stage = {"warn_duration": 8, "warn_brightness": 20}
     if armed_by == "blink":
-        stage = {"effect_timeout": 8, "effect_brightness": 0}
+        stage = {"effect_duration": 8, "effect_brightness": 0}
     light, other, select = await _lit_pair(hass, timeout=5, **stage)
     await _park_real_resend(hass, light, select)
     if armed_by == "brightness":

@@ -82,9 +82,9 @@ async def test_effect_then_warn_then_off(hass, freezer) -> None:
         make_light_entry(
             name="Hall",
             timeout=60,
-            effect_timeout=10,
+            effect_duration=10,
             effect_brightness=0,
-            warn_timeout=15,
+            warn_duration=15,
             warn_brightness=100,
         ),
     )
@@ -110,7 +110,7 @@ async def test_warn_stage_with_a_color(hass, freezer) -> None:
     records = await _setup(
         hass,
         make_light_entry(
-            name="Hall", timeout=60, warn_timeout=15, warn_color_temp=2700
+            name="Hall", timeout=60, warn_duration=15, warn_color_temp=2700
         ),
     )
 
@@ -127,7 +127,11 @@ async def test_a_retrigger_cancels_the_warning(hass, freezer) -> None:
     records = await _setup(
         hass,
         make_light_entry(
-            name="Hall", timeout=60, occupancy=OCC, warn_timeout=15, warn_brightness=100
+            name="Hall",
+            timeout=60,
+            occupancy=OCC,
+            warn_duration=15,
+            warn_brightness=100,
         ),
     )
     await tick(hass, freezer, 61)
@@ -149,7 +153,9 @@ async def test_a_virtual_turn_on_cancels_the_warning_with_its_own_look(
     """A turn-on with a brightness mid-warning is an adjustment that cancels it."""
     records = await _setup(
         hass,
-        make_light_entry(name="Hall", timeout=60, warn_timeout=15, warn_brightness=100),
+        make_light_entry(
+            name="Hall", timeout=60, warn_duration=15, warn_brightness=100
+        ),
     )
     await tick(hass, freezer, 61)
 
@@ -212,7 +218,7 @@ async def test_a_warning_ending_at_standby_says_so(hass, freezer) -> None:
 async def test_a_restart_mid_warning_cancels_it(hass, freezer) -> None:
     """A restart undoes the stage it lands in, which reports cancelled."""
     entry = make_light_entry(
-        name="Hall", timeout=60, occupancy=OCC, warn_timeout=15, warn_brightness=100
+        name="Hall", timeout=60, occupancy=OCC, warn_duration=15, warn_brightness=100
     )
     records = await _setup(hass, entry)
     await tick(hass, freezer, 61)

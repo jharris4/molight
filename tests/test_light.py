@@ -1434,9 +1434,9 @@ async def test_light_restore_keeps_valid_timestamps(
 
 def _warn_light_entry(
     *,
-    effect_timeout: int = 0,
+    effect_duration: int = 0,
     effect_brightness: int = 0,
-    warn_timeout: int = 0,
+    warn_duration: int = 0,
     warn_brightness: int | None = None,
     occupancy: str | None = None,
     keep_on_entities: list[str] | None = None,
@@ -1448,9 +1448,9 @@ def _warn_light_entry(
         CONF_NAME: "Test Light",
         CONF_LIGHTS: ["light.living_room"],
         CONF_TURN_OFF_TIMEOUT: timeout,
-        CONF_EFFECT_DURATION: effect_timeout,
+        CONF_EFFECT_DURATION: effect_duration,
         CONF_EFFECT_BRIGHTNESS: effect_brightness,
-        CONF_WARN_DURATION: warn_timeout,
+        CONF_WARN_DURATION: warn_duration,
     }
     if warn_brightness is not None:
         data[CONF_WARN_BRIGHTNESS] = warn_brightness
@@ -1491,7 +1491,7 @@ async def test_effect_then_warn_then_off(hass: HomeAssistant, freezer) -> None:
     """At an automatic turn-off the light blinks off (effect stage), holds the warn
     brightness (warn stage), then turns off, instead of turning off immediately."""
     entry = _warn_light_entry(
-        effect_timeout=10, effect_brightness=0, warn_timeout=15, warn_brightness=100
+        effect_duration=10, effect_brightness=0, warn_duration=15, warn_brightness=100
     )
     entry.add_to_hass(hass)
     await hass.config_entries.async_setup(entry.entry_id)
@@ -1536,7 +1536,7 @@ async def test_effect_then_warn_then_off(hass: HomeAssistant, freezer) -> None:
 async def test_warn_only_keeps_prior_brightness(hass: HomeAssistant, freezer) -> None:
     """With the effect disabled and no warn brightness, the warn stage keeps the
     brightness the light already had."""
-    entry = _warn_light_entry(warn_timeout=20)  # no effect, no warn_brightness
+    entry = _warn_light_entry(warn_duration=20)  # no effect, no warn_brightness
     entry.add_to_hass(hass)
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
@@ -1563,7 +1563,7 @@ async def test_warn_only_keeps_prior_brightness(hass: HomeAssistant, freezer) ->
 async def test_dim_during_warn_restarts_timer(hass: HomeAssistant, freezer) -> None:
     """A physical dim during the warn stage is a re-trigger: back to ACTIVE
     with a fresh timer, exactly as a dim mid-countdown would be."""
-    entry = _warn_light_entry(warn_timeout=30, warn_brightness=100)
+    entry = _warn_light_entry(warn_duration=30, warn_brightness=100)
     entry.add_to_hass(hass)
     # Real light already on so later brightness changes are on→on dims (the
     # physical-dim path) rather than off→on adoptions. The virtual light adopts
@@ -1601,7 +1601,7 @@ async def test_dim_during_warn_restarts_timer(hass: HomeAssistant, freezer) -> N
 async def test_virtual_on_during_effect_restores(hass: HomeAssistant, freezer) -> None:
     """A virtual turn-on during the effect blink cancels the warning and returns
     the light to ACTIVE."""
-    entry = _warn_light_entry(effect_timeout=10, effect_brightness=0, warn_timeout=10)
+    entry = _warn_light_entry(effect_duration=10, effect_brightness=0, warn_duration=10)
     entry.add_to_hass(hass)
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
@@ -1630,7 +1630,7 @@ async def test_occupancy_retrigger_during_warn(hass: HomeAssistant, freezer) -> 
     """Occupancy returning during the warn stage cancels the warning and holds
     the light on (OCCUPIED), as if the timer were still running."""
     entry = _warn_light_entry(
-        warn_timeout=30, warn_brightness=100, occupancy="binary_sensor.motion_1"
+        warn_duration=30, warn_brightness=100, occupancy="binary_sensor.motion_1"
     )
     entry.add_to_hass(hass)
     hass.states.async_set("binary_sensor.motion_1", "off")
@@ -1666,7 +1666,9 @@ async def test_hold_during_warn_cancels(hass: HomeAssistant, freezer) -> None:
     """Auto-off becoming held during the warn stage cancels the warning, restores
     the brightness, and keeps the light on with no timer."""
     entry = _warn_light_entry(
-        warn_timeout=30, warn_brightness=100, keep_on_entities=["binary_sensor.keep_on"]
+        warn_duration=30,
+        warn_brightness=100,
+        keep_on_entities=["binary_sensor.keep_on"],
     )
     entry.add_to_hass(hass)
     hass.states.async_set("binary_sensor.keep_on", "off")

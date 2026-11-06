@@ -2161,13 +2161,13 @@ async def test_binary_sensor_schedule_drives_scheduled_light_end_to_end(
 ) -> None:
     """A real source propagates through its schedule sensor to the active settings."""
     source = "binary_sensor.house_mode"
-    schedule_entity = "binary_sensor.settings_set_schedule"
+    schedule_entity = "binary_sensor.house_mode_schedule"
     hass.states.async_set(source, "off")
     schedule = MockConfigEntry(
         domain=DOMAIN,
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
-            CONF_NAME: "Settings Set Schedule",
+            CONF_NAME: "House Mode Schedule",
             CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
             CONF_SCHEDULE_SOURCE: source,
         },
@@ -2470,7 +2470,7 @@ async def test_options_reload_to_unavailable_schedule_does_not_invent_boundary(
 
 
 @pytest.mark.asyncio
-async def test_schedule_swap_preserves_already_pending_boundary(
+async def test_schedule_swap_preserves_already_pending_schedule_end_off(
     hass: HomeAssistant,
 ) -> None:
     """A boundary actually observed before a schedule edit remains due."""

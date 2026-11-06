@@ -226,7 +226,7 @@ async def test_options_reload_while_warn_adopts_active(
 ) -> None:
     """A reload landing during the warn stage re-adopts the lit lights as
     ACTIVE (the warning is forgotten) and the new timeout applies."""
-    entry = make_light_entry(timeout=60, warn_timeout=30, warn_brightness=100)
+    entry = make_light_entry(timeout=60, warn_duration=30, warn_brightness=100)
     hass.states.async_set(REAL, "on", {"brightness": 200})
     await setup_entries(hass, entry)
     await settle(hass)
@@ -272,7 +272,7 @@ async def test_options_reload_while_effect_blink_off_goes_idle(
 
     hass.bus.async_listen(EVENT_CALL_SERVICE, _capture)
 
-    entry = make_light_entry(effect_timeout=30, effect_brightness=0, warn_timeout=30)
+    entry = make_light_entry(effect_duration=30, effect_brightness=0, warn_duration=30)
     hass.states.async_set(REAL, "on", {"brightness": 200})
     await setup_entries(hass, entry)
     await settle(hass)

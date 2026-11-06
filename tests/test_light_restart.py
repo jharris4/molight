@@ -980,7 +980,7 @@ async def test_restart_during_effect_blink_off_seeds_idle(
     hass.states.async_set(REAL, "off")  # blinked off by the effect stage
     await setup_entries(
         hass,
-        make_light_entry(effect_timeout=30, effect_brightness=0, warn_timeout=30),
+        make_light_entry(effect_duration=30, effect_brightness=0, warn_duration=30),
     )
     await settle(hass)
 
@@ -1004,7 +1004,7 @@ async def test_restart_during_warn_restores_pre_warn_brightness(
         [State(VIRTUAL, "on", {"brightness": 255, "pre_warn_brightness": 200})],
     )
     hass.states.async_set(REAL, "on", {"brightness": 255})  # warn stage at 100%
-    await setup_entries(hass, make_light_entry(warn_timeout=30, warn_brightness=100))
+    await setup_entries(hass, make_light_entry(warn_duration=30, warn_brightness=100))
     await settle(hass)
 
     state = _state(hass)
@@ -1040,7 +1040,7 @@ async def test_restart_during_warn_without_a_pre_warning_look_keeps_warn_brightn
     falls back to mirroring the members' brightness as is."""
     mock_restore_cache(hass, [State(VIRTUAL, "on", {"brightness": 255})])
     hass.states.async_set(REAL, "on", {"brightness": 255})
-    await setup_entries(hass, make_light_entry(warn_timeout=30, warn_brightness=100))
+    await setup_entries(hass, make_light_entry(warn_duration=30, warn_brightness=100))
     await settle(hass)
 
     state = _state(hass)
@@ -1072,7 +1072,7 @@ async def test_restart_while_a_warning_ending_turn_on_waits_uses_the_pre_warning
         ],
     )
     hass.states.async_set(REAL, "on", {"brightness": 255})
-    await setup_entries(hass, make_light_entry(warn_timeout=30, warn_brightness=100))
+    await setup_entries(hass, make_light_entry(warn_duration=30, warn_brightness=100))
     await settle(hass)
 
     state = _state(hass)
@@ -1093,7 +1093,7 @@ async def test_restart_mid_warning_without_warning_active_uses_the_pre_warning_l
         [State(VIRTUAL, "on", {"brightness": 255, "pre_warn_brightness": 180})],
     )
     hass.states.async_set(REAL, "on", {"brightness": 255})
-    await setup_entries(hass, make_light_entry(warn_timeout=30, warn_brightness=100))
+    await setup_entries(hass, make_light_entry(warn_duration=30, warn_brightness=100))
     await settle(hass)
 
     state = _state(hass)

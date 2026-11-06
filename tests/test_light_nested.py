@@ -143,7 +143,7 @@ async def test_inner_warn_dim_does_not_restart_the_outer_timer(
 ) -> None:
     """The inner's warn stage is mirrored, not taken for a physical dim."""
     inner = make_light_entry(
-        name="Inner", lights=[REAL], timeout=100, warn_timeout=50, warn_brightness=20
+        name="Inner", lights=[REAL], timeout=100, warn_duration=50, warn_brightness=20
     )
     await _nested(hass, "regular", inner=inner)
     await hass.services.async_call(
@@ -398,7 +398,7 @@ async def test_warn_dim_through_an_edited_group_does_not_restart_the_outer_timer
 ) -> None:
     """The group hides the inner light's timestamps; its warn stage is still its own."""
     inner = make_light_entry(
-        name="Inner", lights=[REAL], timeout=50, warn_timeout=120, warn_brightness=20
+        name="Inner", lights=[REAL], timeout=50, warn_duration=120, warn_brightness=20
     )
     bulbs = await _outer_over_edited_group(hass, topology, inner)
     await _tick(hass, freezer, 51)
@@ -462,7 +462,7 @@ async def test_a_physical_dim_of_a_bulb_beside_the_inner_light_is_a_persons(
 ) -> None:
     """A bulb in the group changing with the inner light: not acting by itself."""
     inner = make_light_entry(
-        name="Inner", lights=[REAL], timeout=50, warn_timeout=120, warn_brightness=20
+        name="Inner", lights=[REAL], timeout=50, warn_duration=120, warn_brightness=20
     )
     bulbs = await _outer_over_edited_group(hass, "mixed", inner)
     await _tick(hass, freezer, 51)
@@ -635,9 +635,9 @@ async def test_inner_lit_during_the_outer_blink(
         name="Outer",
         lights=[INNER],
         timeout=60,
-        effect_timeout=5,
+        effect_duration=5,
         effect_brightness=0,
-        warn_timeout=5,
+        warn_duration=5,
         warn_brightness=20,
     )
     await setup_entries(hass, inner, outer)
@@ -736,7 +736,7 @@ async def test_turn_on_of_a_lit_inner_light_cancels_the_outer_warning(
 ) -> None:
     """During the outer light's warn stage it is a re-trigger like any other."""
     outer = make_light_entry(
-        name="Outer", lights=[INNER], timeout=60, warn_timeout=30, warn_brightness=20
+        name="Outer", lights=[INNER], timeout=60, warn_duration=30, warn_brightness=20
     )
     bulb = await _held_inner_under(hass, outer)
     await hass.services.async_call(
@@ -796,9 +796,9 @@ async def test_off_of_an_inner_light_the_outer_blink_turned_off(
         name="Outer",
         lights=[INNER],
         timeout=60,
-        effect_timeout=60,
+        effect_duration=60,
         effect_brightness=0,
-        warn_timeout=5,
+        warn_duration=5,
         warn_brightness=50,
     )
     bulb = await _held_inner_under(hass, outer)

@@ -107,7 +107,7 @@ async def test_attributes_unchanged_through_effect_and_warn(
     """None of the last_on_* / last_brightness_change_* attributes may move
     while the effect and warn stages control the real lights."""
     entry = make_light_entry(
-        effect_timeout=10, effect_brightness=0, warn_timeout=15, warn_brightness=100
+        effect_duration=10, effect_brightness=0, warn_duration=15, warn_brightness=100
     )
     await setup_entries(hass, entry)
 
@@ -157,7 +157,7 @@ async def test_effect_only_goes_straight_off_after_effect(
     hass: HomeAssistant, freezer
 ) -> None:
     """With the warn stage disabled the effect blink is followed by the off."""
-    entry = make_light_entry(effect_timeout=10, effect_brightness=0, warn_timeout=0)
+    entry = make_light_entry(effect_duration=10, effect_brightness=0, warn_duration=0)
     await setup_entries(hass, entry)
     await _turn_on_virtual(hass)
 
@@ -180,7 +180,7 @@ async def test_effect_dim_stage_commands_stage_brightness(
 ) -> None:
     """A non-zero effect brightness dips the real lights instead of blinking
     them off (50% → 128 of 255)."""
-    entry = make_light_entry(effect_timeout=10, effect_brightness=50, warn_timeout=0)
+    entry = make_light_entry(effect_duration=10, effect_brightness=50, warn_duration=0)
     await setup_entries(hass, entry)
     await _turn_on_virtual(hass, brightness=200)
     calls = _record_service_calls(hass)
@@ -203,7 +203,7 @@ async def test_warn_brightness_below_one_percent_keeps_the_brightness(
     hass: HomeAssistant, freezer
 ) -> None:
     """A warn brightness that truncates to 0% counts as blank, not a blink off."""
-    entry = make_light_entry(warn_timeout=20, warn_brightness=0.5)
+    entry = make_light_entry(warn_duration=20, warn_brightness=0.5)
     await setup_entries(hass, entry)
     await _turn_on_virtual(hass, brightness=200)
     calls = _record_service_calls(hass)
@@ -228,7 +228,7 @@ async def test_warn_defaults_to_full_brightness_without_history(
 ) -> None:
     """No warn brightness configured and no brightness ever recorded → the
     warn stage falls back to full brightness."""
-    entry = make_light_entry(warn_timeout=20)
+    entry = make_light_entry(warn_duration=20)
     await setup_entries(hass, entry)
 
     # Adopt a real light that reports no brightness at all.
@@ -251,7 +251,7 @@ async def test_warn_defaults_to_full_brightness_without_history(
 
 @pytest.mark.asyncio
 async def test_manual_off_during_effect_goes_idle(hass: HomeAssistant, freezer) -> None:
-    entry = make_light_entry(effect_timeout=30, effect_brightness=0, warn_timeout=30)
+    entry = make_light_entry(effect_duration=30, effect_brightness=0, warn_duration=30)
     await setup_entries(hass, entry)
     await _turn_on_virtual(hass)
 
@@ -279,7 +279,7 @@ async def test_manual_off_during_effect_goes_idle(hass: HomeAssistant, freezer) 
 @pytest.mark.asyncio
 async def test_physical_off_during_warn_goes_idle(hass: HomeAssistant, freezer) -> None:
     """The real light being switched off physically mid-warn ends everything."""
-    entry = make_light_entry(warn_timeout=30, warn_brightness=100)
+    entry = make_light_entry(warn_duration=30, warn_brightness=100)
     await setup_entries(hass, entry)
     hass.states.async_set(REAL, "on", {"brightness": 200})
     await settle(hass)
@@ -309,7 +309,7 @@ async def test_bright_forces_off_during_warn(hass: HomeAssistant, freezer) -> No
     entry = make_light_entry(
         illuminance=ILLUM,
         illuminance_mode=ILLUMINANCE_MODE_CONTROL,
-        warn_timeout=30,
+        warn_duration=30,
         warn_brightness=100,
     )
     hass.states.async_set(ILLUM, "off")  # dark
@@ -339,7 +339,7 @@ async def test_gate_window_end_during_warn_forces_off(
     entry = make_light_entry(
         schedule=SCHED,
         schedule_mode=SCHEDULE_MODE_GATE,
-        warn_timeout=30,
+        warn_duration=30,
         warn_brightness=100,
     )
     hass.states.async_set(SCHED, "on")
@@ -371,7 +371,7 @@ async def test_occupancy_retrigger_during_effect_restores_brightness(
     """Occupancy returning during the effect blink turns the light on again at the
     brightness it had before the warning began."""
     entry = make_light_entry(
-        occupancy=OCC, effect_timeout=30, effect_brightness=0, warn_timeout=30
+        occupancy=OCC, effect_duration=30, effect_brightness=0, warn_duration=30
     )
     hass.states.async_set(OCC, "off")
     await setup_entries(hass, entry)
@@ -401,7 +401,7 @@ async def test_virtual_on_during_warn_restores_pre_warn_brightness(
 ) -> None:
     """A virtual turn-on with no explicit brightness mid-warning restores the
     pre-warning brightness instead of freezing the warn brightness in place."""
-    entry = make_light_entry(warn_timeout=30, warn_brightness=100)
+    entry = make_light_entry(warn_duration=30, warn_brightness=100)
     await setup_entries(hass, entry)
     await _turn_on_virtual(hass, brightness=200)
     base_change = _state(hass).attributes["last_brightness_change_virtual"]
@@ -442,7 +442,7 @@ async def test_maintain_on_during_warn_restores_and_occupies(
 ) -> None:
     """The maintain occupancy sensor turning on mid-warn adopts the light as OCCUPIED
     and undoes the warn stage."""
-    entry = make_light_entry(maintain=MAINTAIN, warn_timeout=30, warn_brightness=100)
+    entry = make_light_entry(maintain=MAINTAIN, warn_duration=30, warn_brightness=100)
     hass.states.async_set(MAINTAIN, "off")
     await setup_entries(hass, entry)
     await _turn_on_virtual(hass, brightness=200)
@@ -485,9 +485,9 @@ async def test_follow_window_start_during_effect_restores_lights(
     entry = make_light_entry(
         schedule=SCHED,
         schedule_mode=SCHEDULE_MODE_FOLLOW,
-        effect_timeout=30,
+        effect_duration=30,
         effect_brightness=0,
-        warn_timeout=30,
+        warn_duration=30,
     )
     hass.states.async_set(SCHED, "off")
     await setup_entries(hass, entry)
@@ -529,7 +529,7 @@ async def test_schedule_recovery_same_marker_during_warn_restores_lights(
     entry = make_light_entry(
         schedule=SCHED,
         schedule_mode=SCHEDULE_MODE_FOLLOW,
-        warn_timeout=30,
+        warn_duration=30,
         warn_brightness=100,
     )
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
@@ -579,7 +579,7 @@ async def test_physical_dim_during_warning_honors_new_brightness(
     """A physical dim mid-warning cancels the sequence and restarts the full
     timer, but keeps the dim's own brightness; the pre-warning look is not
     restored over the person's explicit choice."""
-    entry = make_light_entry(effect_timeout=10, effect_brightness=50, warn_timeout=15)
+    entry = make_light_entry(effect_duration=10, effect_brightness=50, warn_duration=15)
     await setup_entries(hass, entry)
 
     await _turn_on_virtual(hass, brightness=200)
@@ -622,10 +622,10 @@ async def test_physical_dim_mid_effect_restores_pre_warning_color(
 ) -> None:
     """A brightness-only re-trigger mid-warning undoes the stage recolor."""
     entry = make_light_entry(
-        effect_timeout=10,
+        effect_duration=10,
         effect_brightness=50,
         effect_rgb_color=[255, 0, 0],
-        warn_timeout=15,
+        warn_duration=15,
     )
     await setup_entries(hass, entry)
 
@@ -691,10 +691,10 @@ async def test_colorless_warn_stage_names_a_color_only_to_undo_the_effect(
     lit = {"brightness": 200, **HS_CAPS}
     hass.states.async_set("light.a", "on", {**lit, "hs_color": (30.0, 80.0)})
     hass.states.async_set("light.b", "on", {**lit, "hs_color": (240.0, 80.0)})
-    stages = {"warn_timeout": 10, "warn_brightness": 20}
+    stages = {"warn_duration": 10, "warn_brightness": 20}
     if effect_color:
         stages |= {
-            "effect_timeout": 10,
+            "effect_duration": 10,
             "effect_brightness": 50,
             "effect_rgb_color": effect_color,
         }
@@ -741,9 +741,9 @@ async def test_colorless_warn_stage_names_a_color_only_to_undo_the_effect(
 async def _enter_stage_at_200(hass: HomeAssistant, freezer, stage: str) -> list[dict]:
     """Light at 200 in a stage that dims it to 26; returns later calls."""
     entry = make_light_entry(
-        effect_timeout=10 if stage == STATE_EFFECT else None,
+        effect_duration=10 if stage == STATE_EFFECT else None,
         effect_brightness=10,
-        warn_timeout=30,
+        warn_duration=30,
         warn_brightness=10,
     )
     await setup_entries(hass, entry)
@@ -835,7 +835,7 @@ async def test_physical_recolor_during_warning_without_a_brightness_to_restore(
     hass: HomeAssistant, freezer
 ) -> None:
     """With no pre-warning brightness known, a recolor sends no command."""
-    await setup_entries(hass, make_light_entry(warn_timeout=30))
+    await setup_entries(hass, make_light_entry(warn_duration=30))
     await _turn_on_virtual(hass)
     hass.states.async_set(REAL, "on", {"hs_color": (30.0, 40.0), **HS_CAPS})
     await settle(hass)
@@ -880,7 +880,7 @@ async def test_warn_after_plain_turn_on_keeps_real_brightness(
 ) -> None:
     """A warn stage with no brightness of its own keeps the brightness the real
     light came on at instead of jumping to full brightness."""
-    entry = make_light_entry(warn_timeout=20)
+    entry = make_light_entry(warn_duration=20)
     await setup_entries(hass, entry)
     hass.states.async_set(REAL, "off")
     await settle(hass)
@@ -905,7 +905,7 @@ async def test_retrigger_after_plain_auto_on_restores_real_brightness(
     """Occupancy returning mid-warn brings back the brightness the real light came
     on at instead of leaving the room at the warn brightness."""
     hass.states.async_set(OCC, "off")
-    entry = make_light_entry(occupancy=OCC, warn_timeout=30, warn_brightness=20)
+    entry = make_light_entry(occupancy=OCC, warn_duration=30, warn_brightness=20)
     await setup_entries(hass, entry)
     hass.states.async_set(REAL, "off")
     await settle(hass)
@@ -992,7 +992,7 @@ async def test_physical_turn_on_during_blink_off_turns_on_the_other_light(
     """One switch flipped back on during the blink: the other light comes
     back at its pre-warning look, not left off for the new on-period."""
     one, other, calls = await _pair_in_stage(
-        hass, freezer, touched, effect_timeout=10, effect_brightness=0
+        hass, freezer, touched, effect_duration=10, effect_brightness=0
     )
     assert not one.is_on
     assert not other.is_on
@@ -1027,7 +1027,7 @@ async def test_physical_change_during_a_stage_restores_the_other_light(
     """The light physically changed keeps what was changed on it and gets
     the rest of its pre-warning look back; the other gets all of it."""
     stages = {
-        f"{stage}_timeout": 30,
+        f"{stage}_duration": 30,
         f"{stage}_brightness": 10,
         f"{stage}_rgb_color": STAGE_RED,
     }
@@ -1058,7 +1058,7 @@ async def test_physical_off_and_on_during_a_stage_restores_the_other_light(
     """One light physically switched off leaves the warning running on the
     other; switched back on, it cancels it for both."""
     one, other, _ = await _pair_in_stage(
-        hass, freezer, touched, warn_timeout=30, warn_brightness=10
+        hass, freezer, touched, warn_duration=30, warn_brightness=10
     )
 
     one.physical_change(on=False)
@@ -1086,7 +1086,9 @@ async def test_physical_change_outside_a_warning_leaves_the_other_light_alone(
     await setup_entries(
         hass,
         make_light_entry(
-            lights=["light.real_1", "light.real_2"], warn_timeout=30, warn_brightness=10
+            lights=["light.real_1", "light.real_2"],
+            warn_duration=30,
+            warn_brightness=10,
         ),
     )
     calls = _record_service_calls(hass)
@@ -1109,15 +1111,15 @@ HOLD_SWITCH = "switch.matrix_light_auto_off"
 # Green at 50, blue at 200, warm white at 120, and one off.
 BEFORE = {"a": (50, GREEN), "b": (200, BLUE), "k": (120, 2700), "c": None}
 MIXED_STAGES = {
-    "dim": {"effect_timeout": 30, "effect_brightness": 10},
-    "blink": {"effect_timeout": 30, "effect_brightness": 0},
+    "dim": {"effect_duration": 30, "effect_brightness": 10},
+    "blink": {"effect_duration": 30, "effect_brightness": 0},
     "colored": {
-        "effect_timeout": 30,
+        "effect_duration": 30,
         "effect_brightness": 10,
         "effect_rgb_color": STAGE_RED,
     },
-    "warn": {"warn_timeout": 30, "warn_brightness": 10},
-    "blank_warn": {"warn_timeout": 30},
+    "warn": {"warn_duration": 30, "warn_brightness": 10},
+    "blank_warn": {"warn_duration": 30},
 }
 
 

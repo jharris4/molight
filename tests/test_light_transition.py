@@ -135,9 +135,9 @@ async def test_stage_and_final_off_transitions(hass: HomeAssistant, freezer) -> 
     """The effect dip, the warn brightness, and the final off each fade with
     their own configured transition."""
     entry = make_light_entry(
-        effect_timeout=10,
+        effect_duration=10,
         effect_brightness=50,
-        warn_timeout=15,
+        warn_duration=15,
         warn_brightness=80,
         effect_transition=1.5,
         warn_transition=4,
@@ -180,7 +180,7 @@ async def test_effect_blink_off_uses_effect_transition(
     """An effect brightness of 0 blinks the real lights off via turn_off; that
     call still uses the effect transition."""
     entry = make_light_entry(
-        effect_timeout=10, effect_brightness=0, warn_timeout=0, effect_transition=1
+        effect_duration=10, effect_brightness=0, warn_duration=0, effect_transition=1
     )
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -293,7 +293,7 @@ async def test_caller_transition_carries_the_pre_warning_restore(
 ) -> None:
     """A turn-on mid-warning restores the pre-warning brightness over the
     caller's transition rather than snapping to it."""
-    entry = make_light_entry(effect_timeout=10, effect_brightness=50)
+    entry = make_light_entry(effect_duration=10, effect_brightness=50)
     await setup_entries(hass, entry)
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}

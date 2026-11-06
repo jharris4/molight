@@ -9212,7 +9212,7 @@ _ALL_MODES = ["rgb", "color_temp"]
 
 # case: (member color modes, member features, settings submitted, error)
 _SHARED_LIGHT_CASES = {
-    "light_timeout": (
+    "turn_off_timeout": (
         _ALL_MODES,
         LightEntityFeature.TRANSITION,
         {

@@ -643,10 +643,10 @@ async def test_brightness_step_up_and_down(
 # Stage settings for a brightness step mid-warning: (light kwargs, the stage
 # state, the brightness the light reports during it).
 STAGES = {
-    "warn": ({"warn_timeout": 30, "warn_brightness": 10}, STATE_WARN, 26),
-    "effect": ({"effect_timeout": 10, "effect_brightness": 30}, STATE_EFFECT, 76),
+    "warn": ({"warn_duration": 30, "warn_brightness": 10}, STATE_WARN, 26),
+    "effect": ({"effect_duration": 10, "effect_brightness": 30}, STATE_EFFECT, 76),
     "blink_effect": (
-        {"effect_timeout": 10, "effect_brightness": 0},
+        {"effect_duration": 10, "effect_brightness": 0},
         STATE_EFFECT,
         None,
     ),

@@ -655,7 +655,7 @@ async def test_dark_edge_after_a_bright_off_during_the_warning_resumes_nothing(
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(REAL, "off")
     _real_light_reports(hass)
-    entry = make_light_entry(illuminance=ILLUM, warn_timeout=30, warn_brightness=50)
+    entry = make_light_entry(illuminance=ILLUM, warn_duration=30, warn_brightness=50)
     await setup_entries(hass, entry)
     await _turn_on_by(hass, "virtual")
     await _tick(hass, freezer, 61)

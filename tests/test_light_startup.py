@@ -854,7 +854,7 @@ async def _restart_mid_warn(
     real = _Members(hass, members, HS_CAPS if color else {})
     entry = make_light_entry(
         lights=members,
-        warn_timeout=30,
+        warn_duration=30,
         warn_brightness=20,
         warn_rgb_color=[255, 0, 0] if color else None,
     )
@@ -1010,7 +1010,7 @@ async def test_warning_restart_restores_each_members_own_look(
     await add_real(hass, *lights)
     entry = make_light_entry(
         lights=[light.entity_id for light in lights],
-        warn_timeout=30,
+        warn_duration=30,
         warn_brightness=20,
     )
     await setup_entries(hass, entry)
@@ -1089,7 +1089,7 @@ async def test_restart_during_a_blink_off_stays_off(
 ) -> None:
     """Members blinked off by the effect stage stay off, readable or late."""
     real = _Members(hass, [REAL], {})
-    entry = make_light_entry(effect_timeout=30, effect_brightness=0, warn_timeout=30)
+    entry = make_light_entry(effect_duration=30, effect_brightness=0, warn_duration=30)
     await setup_entries(hass, entry)
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}, blocking=True

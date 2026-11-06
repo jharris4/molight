@@ -491,9 +491,9 @@ async def test_real_light_going_missing_does_not_cancel_a_blink_off(
         make_light_entry(
             lights=[MEMBER, "light.real_2"],
             timeout=60,
-            effect_timeout=5,
+            effect_duration=5,
             effect_brightness=0,
-            warn_timeout=5,
+            warn_duration=5,
         ),
     )
     await settle(hass)
@@ -549,7 +549,10 @@ async def test_disabled_real_light_is_owed_nothing_after_a_restart(
     second = RealLight("real_2", on=True, brightness=200)
     await add_real(hass, first, second)
     entry = make_light_entry(
-        lights=[MEMBER, "light.real_2"], timeout=60, warn_timeout=30, warn_brightness=20
+        lights=[MEMBER, "light.real_2"],
+        timeout=60,
+        warn_duration=30,
+        warn_brightness=20,
     )
     await setup_entries(hass, entry)
     await settle(hass)
@@ -600,7 +603,10 @@ async def test_real_light_still_owed_a_restore_goes_missing(
     second = RealLight("real_2", on=True, brightness=200)
     await add_real(hass, first, second)
     entry = make_light_entry(
-        lights=[MEMBER, "light.real_2"], timeout=60, warn_timeout=30, warn_brightness=20
+        lights=[MEMBER, "light.real_2"],
+        timeout=60,
+        warn_duration=30,
+        warn_brightness=20,
     )
     await setup_entries(hass, entry)
     await settle(hass)

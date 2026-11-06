@@ -360,9 +360,9 @@ async def test_real_light_reporting_in_off_mid_warning_gets_the_stage(
         hass,
         "virtual",
         "off",
-        effect_timeout=20,
+        effect_duration=20,
         effect_brightness=effect_brightness,
-        warn_timeout=20,
+        warn_duration=20,
     )
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
@@ -682,7 +682,7 @@ async def test_failed_stage_turn_on_with_nothing_lit_ends_the_on_period(
     await setup_entries(
         hass,
         make_light_entry(
-            occupancy=OCC, auto_on_brightness=40, warn_timeout=20, warn_brightness=50
+            occupancy=OCC, auto_on_brightness=40, warn_duration=20, warn_brightness=50
         ),
     )
     await settle(hass)

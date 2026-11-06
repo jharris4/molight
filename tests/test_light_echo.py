@@ -291,7 +291,7 @@ async def test_dim_during_warning_under_our_context_cancels_it(
         name="Test Light",
         lights=[MEMBER],
         timeout=60,
-        warn_timeout=30,
+        warn_duration=30,
         warn_brightness=20,
     )
     await _setup(hass, entry)
@@ -585,11 +585,11 @@ async def test_effect_kelvin_fade_reply_keeps_the_sequence(
         name="Test Light",
         lights=[MEMBER],
         timeout=60,
-        effect_timeout=8,
+        effect_duration=8,
         effect_brightness=80,  # percent: 204
         effect_color_temp=3000,
         effect_transition=4,
-        warn_timeout=0,
+        warn_duration=0,
     )
     await _setup(hass, entry)
     hass.states.async_set(MEMBER, "off", HS_COLOR_TEMP_CAPS)
@@ -1241,9 +1241,9 @@ async def test_late_effect_dim_reply_does_not_cancel_warn(
     effect_context, warn_context = await _into_warn(
         hass,
         freezer,
-        effect_timeout=2,
+        effect_duration=2,
         effect_brightness=10,
-        warn_timeout=30,
+        warn_duration=30,
         warn_brightness=50,
     )
     if reply_context == "own":
@@ -1273,7 +1273,7 @@ async def test_late_effect_blink_off_reply_does_not_cancel_warn(
     """A blink-off reported after the warn command is not a physical off,
     and the warn reply that follows is not a physical turn-on."""
     effect_context, warn_context = await _into_warn(
-        hass, freezer, effect_timeout=2, warn_timeout=30, warn_brightness=50
+        hass, freezer, effect_duration=2, warn_duration=30, warn_brightness=50
     )
     context = effect_context if reply_context == "effect" else warn_context
 
@@ -1294,9 +1294,9 @@ async def test_in_order_stage_replies_keep_the_sequence(
         name="Test Light",
         lights=[MEMBER],
         timeout=60,
-        effect_timeout=2,
+        effect_duration=2,
         effect_brightness=10,
-        warn_timeout=30,
+        warn_duration=30,
         warn_brightness=50,
     )
     await _setup(hass, entry)
@@ -1326,7 +1326,7 @@ async def test_late_reply_to_restore_after_warn_is_not_physical(
         name="Test Light",
         lights=[MEMBER],
         timeout=60,
-        warn_timeout=30,
+        warn_duration=30,
         warn_brightness=20,
     )
     await _setup(hass, entry)
@@ -1766,8 +1766,8 @@ async def test_stage_color_fade_across_the_wheel_keeps_the_sequence(
     hass: HomeAssistant, freezer, blend: str, stage: str
 ) -> None:
     """A stage fading from red to cyan is not cancelled by its own fade."""
-    stages = {"effect_timeout": 0, "warn_timeout": 0} | {
-        f"{stage}_timeout": 10,
+    stages = {"effect_duration": 0, "warn_duration": 0} | {
+        f"{stage}_duration": 10,
         f"{stage}_brightness": 80,
         f"{stage}_rgb_color": [0, 255, 255],
         f"{stage}_transition": 4,
@@ -1794,11 +1794,11 @@ async def test_far_apart_effect_and_warn_colors_still_turn_the_light_off(
     member = await _lit_red(
         hass,
         blend,
-        effect_timeout=5,
+        effect_duration=5,
         effect_brightness=80,
         effect_rgb_color=[0, 0, 255],
         effect_transition=2,
-        warn_timeout=5,
+        warn_duration=5,
         warn_brightness=50,
         warn_rgb_color=[255, 255, 0],
         warn_transition=2,
@@ -1824,10 +1824,10 @@ async def test_warn_undoing_the_effect_color_keeps_the_sequence(
     member = await _lit_red(
         hass,
         blend,
-        effect_timeout=5,
+        effect_duration=5,
         effect_brightness=80,
         effect_rgb_color=[0, 255, 255],
-        warn_timeout=10,
+        warn_duration=10,
         warn_brightness=50,
     )
     await _tick(hass, freezer, 61)
@@ -1851,7 +1851,7 @@ async def test_restoring_the_pre_warning_color_is_not_a_recolor(
 ) -> None:
     """A re-trigger fades the warning's cyan back to red; that is no recolor."""
     member = await _lit_red(
-        hass, blend, warn_timeout=10, warn_brightness=50, warn_rgb_color=[0, 255, 255]
+        hass, blend, warn_duration=10, warn_brightness=50, warn_rgb_color=[0, 255, 255]
     )
     await _tick(hass, freezer, 61)
     await member.answer()
@@ -1876,7 +1876,7 @@ async def test_recolor_beside_a_stage_fade_still_cancels_the_warning(
     await _lit_red(
         hass,
         blend,
-        warn_timeout=10,
+        warn_duration=10,
         warn_brightness=80,
         warn_rgb_color=[0, 255, 255],
         warn_transition=4,
@@ -2088,9 +2088,9 @@ async def test_reply_inside_a_stage_call_reports_the_stage_brightness_only(
     await setup_entries(
         hass,
         make_light_entry(
-            warn_timeout=10,
+            warn_duration=10,
             warn_brightness=20,
-            effect_timeout=10 if stage == "effect" else None,
+            effect_duration=10 if stage == "effect" else None,
             effect_brightness=20 if stage == "effect" else None,
         ),
     )
@@ -2189,7 +2189,7 @@ async def test_stage_fade_is_not_a_physical_dim(
     hass: HomeAssistant, freezer, fade: int, stage: str
 ) -> None:
     """A stage's fade, reported in steps, runs to its end and the light goes off."""
-    stages = {f"{stage}_timeout": 30, f"{stage}_brightness": 20}
+    stages = {f"{stage}_duration": 30, f"{stage}_brightness": 20}
     member = await _fading_light(
         hass, make_light_entry(**stages, **{f"{stage}_transition": fade})
     )
@@ -2217,7 +2217,7 @@ async def test_blink_off_fade_is_not_a_physical_off(
     member = await _fading_light(
         hass,
         make_light_entry(
-            effect_timeout=30, effect_brightness=0, effect_transition=fade
+            effect_duration=30, effect_brightness=0, effect_transition=fade
         ),
     )
     await _run(hass, freezer, 61)
@@ -2359,7 +2359,7 @@ async def test_warning_restore_fade_is_not_a_physical_dim(
     """A turn-on during the warning restores the old brightness over its own
     transition."""
     member = await _fading_light(
-        hass, make_light_entry(warn_timeout=30, warn_brightness=20)
+        hass, make_light_entry(warn_duration=30, warn_brightness=20)
     )
     await _run(hass, freezer, 62)
     assert member.brightness == 51
@@ -2386,7 +2386,7 @@ async def test_stage_color_fade_is_not_a_physical_recolor(
     member = await _fading_light(
         hass,
         make_light_entry(
-            warn_timeout=30,
+            warn_duration=30,
             warn_brightness=20,
             warn_rgb_color=[0, 255, 255],
             warn_transition=fade,
@@ -2415,7 +2415,7 @@ async def test_physical_change_late_in_a_stage_fade_still_cancels_it(
     still a person's."""
     member = await _fading_light(
         hass,
-        make_light_entry(warn_timeout=30, warn_brightness=20, warn_transition=10),
+        make_light_entry(warn_duration=30, warn_brightness=20, warn_transition=10),
         hs=RED,
     )
     await _run(hass, freezer, 61 + 7)
@@ -2491,7 +2491,7 @@ async def test_recolor_off_the_way_late_in_a_color_fade_is_a_recolor(
     member = await _fading_light(
         hass,
         make_light_entry(
-            warn_timeout=30,
+            warn_duration=30,
             warn_brightness=20,
             warn_rgb_color=[0, 255, 255],
             warn_transition=10,
@@ -2676,9 +2676,9 @@ async def test_warn_after_blink_off_power_first_at_old_brightness_is_not_a_dim(
     await setup_entries(
         hass,
         make_light_entry(
-            effect_timeout=30,
+            effect_duration=30,
             effect_brightness=0,
-            warn_timeout=30,
+            warn_duration=30,
             warn_brightness=20,
             warn_transition=fade,
         ),
@@ -2902,7 +2902,7 @@ async def _mixed_light(
         )
     else:
         stage = {
-            f"{source}_timeout": 30,
+            f"{source}_duration": 30,
             f"{source}_brightness": 50,
             f"{source}_rgb_color": rgb,
         }

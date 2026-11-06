@@ -162,11 +162,11 @@ def make_light_entry(
     auto_on_brightness: int | None = None,
     auto_on_color_temp: int | None = None,
     auto_on_rgb_color: list[int] | None = None,
-    effect_timeout: int | None = None,
+    effect_duration: int | None = None,
     effect_brightness: int | None = None,
     effect_color_temp: int | None = None,
     effect_rgb_color: list[int] | None = None,
-    warn_timeout: int | None = None,
+    warn_duration: int | None = None,
     warn_brightness: int | None = None,
     warn_color_temp: int | None = None,
     warn_rgb_color: list[int] | None = None,
@@ -220,16 +220,16 @@ def make_light_entry(
         data[CONF_AUTO_ON_COLOR_TEMP] = auto_on_color_temp
     if auto_on_rgb_color is not None:
         data[CONF_AUTO_ON_RGB_COLOR] = auto_on_rgb_color
-    if effect_timeout is not None:
-        data[CONF_EFFECT_DURATION] = effect_timeout
+    if effect_duration is not None:
+        data[CONF_EFFECT_DURATION] = effect_duration
     if effect_brightness is not None:
         data[CONF_EFFECT_BRIGHTNESS] = effect_brightness
     if effect_color_temp is not None:
         data[CONF_EFFECT_COLOR_TEMP] = effect_color_temp
     if effect_rgb_color is not None:
         data[CONF_EFFECT_RGB_COLOR] = effect_rgb_color
-    if warn_timeout is not None:
-        data[CONF_WARN_DURATION] = warn_timeout
+    if warn_duration is not None:
+        data[CONF_WARN_DURATION] = warn_duration
     if warn_brightness is not None:
         data[CONF_WARN_BRIGHTNESS] = warn_brightness
     if warn_color_temp is not None:

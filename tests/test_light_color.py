@@ -375,7 +375,7 @@ async def test_warn_color_shown_and_restored_on_retrigger(
     restores the pre-warning color and brightness."""
     hass.states.async_set(REAL, "off", HS_CAPS)
     await setup_entries(
-        hass, make_light_entry(warn_timeout=15, warn_rgb_color=[255, 0, 0])
+        hass, make_light_entry(warn_duration=15, warn_rgb_color=[255, 0, 0])
     )
 
     await _turn_on_virtual(hass, brightness=200, hs_color=[100, 100])
@@ -416,10 +416,10 @@ async def test_plain_warn_stage_undoes_effect_recolor(
     await setup_entries(
         hass,
         make_light_entry(
-            effect_timeout=10,
+            effect_duration=10,
             effect_brightness=50,
             effect_rgb_color=[0, 0, 255],
-            warn_timeout=10,
+            warn_duration=10,
         ),
     )
 
@@ -455,10 +455,10 @@ async def test_stage_color_temps_sent_as_kelvin(hass: HomeAssistant, freezer) ->
     await setup_entries(
         hass,
         make_light_entry(
-            effect_timeout=10,
+            effect_duration=10,
             effect_brightness=50,
             effect_color_temp=2200,
-            warn_timeout=10,
+            warn_duration=10,
             warn_color_temp=6500,
         ),
     )
@@ -593,7 +593,7 @@ async def test_restart_mid_warning_restores_pre_warn_color(
     )
     calls = _record_service_calls(hass)
     await setup_entries(
-        hass, make_light_entry(warn_timeout=15, warn_rgb_color=[255, 0, 0])
+        hass, make_light_entry(warn_duration=15, warn_rgb_color=[255, 0, 0])
     )
     await settle(hass)
 
@@ -644,7 +644,7 @@ async def test_pre_warning_look_keeps_color_temp(hass: HomeAssistant, freezer) -
     pre-warning look, and a re-trigger with no color of its own restores it."""
     hass.states.async_set(REAL, "off", HS_COLOR_TEMP_CAPS)
     await setup_entries(
-        hass, make_light_entry(warn_timeout=15, warn_rgb_color=[255, 0, 0])
+        hass, make_light_entry(warn_duration=15, warn_rgb_color=[255, 0, 0])
     )
 
     await _turn_on_virtual(hass, brightness=200, color_temp_kelvin=3000)
@@ -807,7 +807,7 @@ async def test_onoff_light_effect_blink_off_still_works(
     hass.states.async_set(REAL, "off", ONOFF_CAPS)
     await setup_entries(
         hass,
-        make_light_entry(effect_timeout=10, effect_brightness=0, warn_timeout=0),
+        make_light_entry(effect_duration=10, effect_brightness=0, warn_duration=0),
     )
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)
@@ -844,7 +844,7 @@ async def test_reported_color_temp_stays_in_the_offered_range(
     hass.states.async_set(REAL, "off", NARROW_CAPS)
     hass.states.async_set(OCC, "off")
     stage = {
-        f"{source}_timeout": 30,
+        f"{source}_duration": 30,
         f"{source}_brightness": 50,
         f"{source}_color_temp": kelvin,
     }
@@ -921,7 +921,7 @@ async def test_pre_warning_look_keeps_the_reported_color_temp(
         make_light_entry(
             occupancy=OCC,
             auto_on_color_temp=kelvin,
-            warn_timeout=15,
+            warn_duration=15,
             warn_color_temp=4000,
         ),
     )

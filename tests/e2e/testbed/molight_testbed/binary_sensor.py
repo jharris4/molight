@@ -95,8 +95,8 @@ async def async_setup_entry(
         TestbedBinarySensor(
             controller,
             SCHEDULE,
-            "binary_sensor.e2e_schedule_source",
-            "E2E Schedule Source",
+            "binary_sensor.e2e_raw_schedule",
+            "E2E Raw Schedule",
         ),
     ]
     async_add_with_startup_delays(controller, async_add_entities, sensors)
