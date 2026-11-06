@@ -394,9 +394,11 @@ from .const import (
     REASON_BRIGHT,
     REASON_DOOR,
     REASON_FALSE_DETECTION,
+    REASON_GONE,
     REASON_ILLUMINANCE,
     REASON_OCCUPANCY,
     REASON_PHYSICAL,
+    REASON_REJECTED,
     REASON_RESUME,
     REASON_SCHEDULE,
     REASON_SCHEDULE_END,
@@ -2874,7 +2876,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 and not self._turn_on_waiting()
                 and self._all_lights_off()
             ):
-                self._go_idle(reason=REASON_PHYSICAL)
+                self._go_idle(reason=REASON_GONE)
         if entity_id == self._occupancy_sensor:
             self._occupancy_last_on = None
             self._occupancy_on_since = None
@@ -5643,7 +5645,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             return  # another command may still light, or darken, the room
         if on:
             if self._machine_state != STATE_IDLE and self._all_lights_off():
-                self._go_idle(reason=REASON_PHYSICAL)
+                self._go_idle(reason=REASON_REJECTED)
         elif not self._attr_is_on and not self._all_lights_off():
             if color := self._first_on_member_color():
                 self._set_color_state(*color)

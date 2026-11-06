@@ -37,8 +37,10 @@ from custom_components.molight.const import (
     DOOR_MODE_OPEN_CLOSE,
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
+    EVENT_TURNED_OFF,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE_ONLY,
+    REASON_GONE,
     RELOAD_GRACE,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
@@ -57,6 +59,7 @@ from tests.conftest import (
     settle,
     setup_entries,
 )
+from tests.events import record_events
 from tests.real_entities import (
     RealBinary,
     RealLight,
@@ -72,6 +75,7 @@ if TYPE_CHECKING:
     from homeassistant.core import Event, HomeAssistant
 
 VIRTUAL = "light.matrix_light"
+EVENTS = "event.matrix_light_events"
 MEMBER = "light.real_1"
 INPUT = "binary_sensor.input"
 # How an entity leaves: its registry entry deleted or disabled, or, for an
@@ -425,7 +429,8 @@ async def test_light_whose_last_lit_real_light_goes_missing_is_off(
 ) -> None:
     """With its only lit real light gone, the light is off, not turned off.
 
-    The other real light is not commanded, and no manual off is recorded.
+    The other real light is not commanded, no manual off is recorded, and
+    the off is recorded as gone.
     """
     await provide(hass, how, RealLight("real_2", on=True))
     hass.states.async_set(MEMBER, "off")
@@ -438,12 +443,16 @@ async def test_light_whose_last_lit_real_light_goes_missing_is_off(
     assert attrs(hass)["molight_state"] == STATE_OCCUPIED
 
     calls = record_service_calls(hass)
+    records = record_events(hass, EVENTS)
     await remove(hass, how, "light.real_2")
     state = hass.states.get(VIRTUAL)
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
     assert state.attributes["last_off_manual"] is None
     assert light_targets(calls, "turn_off") == light_targets(calls, "turn_on") == []
+    assert [r["reason"] for r in records if r["event_type"] == EVENT_TURNED_OFF] == [
+        REASON_GONE
+    ]
 
 
 @pytest.mark.parametrize("how", GONE)

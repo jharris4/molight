@@ -46,8 +46,10 @@ from custom_components.molight.const import (
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
+    EVENT_TURNED_OFF,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE_ONLY,
+    REASON_REJECTED,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
@@ -70,6 +72,7 @@ from tests.conftest import (
     settle,
     setup_entries,
 )
+from tests.events import record_events
 from tests.real_entities import change_entity_id
 
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
@@ -84,6 +87,7 @@ SCHED = "binary_sensor.sched"
 REAL = "light.real_1"
 REAL2 = "light.real_2"
 VIRTUAL = "light.matrix_light"
+EVENTS = "event.matrix_light_events"
 KEEP_ON = "input_boolean.keep_on"
 MARKER = "2026-07-02T21:00:00+00:00"
 
@@ -442,8 +446,8 @@ async def test_failed_turn_on_does_not_leave_the_light_on_with_nothing_lit(
     hass: HomeAssistant, caplog, trigger: str
 ) -> None:
     """A member whose integration raises at a turn-on was not lit: the light
-    reports off and idle, not on over a dark room, and the next trigger
-    sends the turn-on again."""
+    reports off and idle, not on over a dark room, with the off recorded as
+    rejected, and the next trigger sends the turn-on again."""
     hass.states.async_set(OCC, "off")
     hass.states.async_set(DOOR, "off")
     hass.states.async_set(REAL, "off")
@@ -452,6 +456,7 @@ async def test_failed_turn_on_does_not_leave_the_light_on_with_nothing_lit(
     )
     await settle(hass)
     calls = _record_calls(hass)
+    records = record_events(hass, EVENTS)
     member = _MemberLight(hass, "turn_on", error=_OFFLINE)
 
     await _trigger(hass, trigger)
@@ -460,6 +465,9 @@ async def test_failed_turn_on_does_not_leave_the_light_on_with_nothing_lit(
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
     assert state.attributes["last_off_manual"] is None
+    assert [r["reason"] for r in records if r["event_type"] == EVENT_TURNED_OFF] == [
+        REASON_REJECTED
+    ]
     assert [c["brightness"] for c in _real_calls(calls, "turn_on")] == [
         _BRIGHTNESS[trigger]
     ]
