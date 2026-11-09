@@ -1,7 +1,7 @@
 # Pinned: the test package pins the pytest stack and one Home Assistant
 # release. CI also runs the declared floor; see the pytest matrix in
 # .github/workflows/ci.yml.
-pytest-homeassistant==2026.11.0
+pytest-homeassistant==2026.11.1
 # pytest-homeassistant does not pin these, which `timeout` and `--cov` need.
 pytest-timeout==2.4.0
 pytest-cov==7.1.0
