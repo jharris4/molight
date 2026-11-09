@@ -13,7 +13,7 @@ from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
     CONF_NAME,
-    CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_TRIGGER_SENSORS,
     DOMAIN,
@@ -33,7 +33,7 @@ def _sensor() -> MockConfigEntry:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Motion",
-            CONF_OCCUPANCY_SENSOR: PIR,
+            CONF_OCCUPANCY_SOURCE: PIR,
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_FALSE_DETECTION_GRACE: 3,
         },

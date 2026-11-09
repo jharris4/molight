@@ -23,7 +23,7 @@ from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
     CONF_NAME,
-    CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_SCHEDULE_DEFINITION,
     CONF_SCHEDULE_INPUTS,
@@ -88,7 +88,7 @@ def _occupancy(source: str) -> MockConfigEntry:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Seen",
-            CONF_OCCUPANCY_SENSOR: source,
+            CONF_OCCUPANCY_SOURCE: source,
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_FALSE_DETECTION_GRACE: 0,
         },

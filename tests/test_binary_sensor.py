@@ -21,11 +21,11 @@ from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
     CONF_ILLUMINANCE_HYSTERESIS,
-    CONF_ILLUMINANCE_SENSOR,
+    CONF_ILLUMINANCE_SOURCE,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
-    CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_TRIGGER_SENSORS,
     DOMAIN,
@@ -62,7 +62,7 @@ def _occupancy2_entry() -> MockConfigEntry:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Test Occupancy 2",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_2",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_2",
             CONF_OCCUPANCY_TIMEOUT: 45,
         },
     )
@@ -149,7 +149,7 @@ async def test_occupancy_holds_forever_when_unavailable_clear_disabled(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Test Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT: 0,
         },
@@ -378,7 +378,7 @@ async def test_early_clear_is_false_detection(hass: HomeAssistant, freezer) -> N
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Early Clear Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_FALSE_DETECTION_GRACE: 3,
         },
@@ -416,7 +416,7 @@ async def test_late_loading_source_clear_is_not_false_detection(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Late Source Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_FALSE_DETECTION_GRACE: 3,
         },
@@ -450,7 +450,7 @@ async def test_detection_after_a_plain_outage_is_still_classified(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Outage Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_FALSE_DETECTION_GRACE: 3,
         },
@@ -482,7 +482,7 @@ async def test_false_detection_classification_and_count(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "FD Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_FALSE_DETECTION_GRACE: 3,
         },
@@ -538,7 +538,7 @@ async def test_occupancy_edit_mid_visit_keeps_visit_start_and_applies_new_timeou
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Edited Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_FALSE_DETECTION_GRACE: 3,
         },
@@ -580,7 +580,7 @@ async def test_false_detection_grace_edge(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Edge Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_FALSE_DETECTION_GRACE: 3,
         },
@@ -605,7 +605,7 @@ def _dropout_entry() -> MockConfigEntry:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Dropout Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT: 60,
         },
@@ -874,7 +874,7 @@ async def test_recovery_to_on_preserves_false_detection_clock(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Blip Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_FALSE_DETECTION_GRACE: 3,
         },
@@ -954,7 +954,7 @@ async def test_combined_counts_false_detections(hass: HomeAssistant, freezer) ->
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "FD Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_FALSE_DETECTION_GRACE: 3,
         },
@@ -996,7 +996,7 @@ async def test_illuminance_hysteresis_holds_state_in_band(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
             CONF_NAME: "Hyst Illuminance",
-            CONF_ILLUMINANCE_SENSOR: "sensor.lux_1",
+            CONF_ILLUMINANCE_SOURCE: "sensor.lux_1",
             CONF_ILLUMINANCE_THRESHOLD: 10.0,
             CONF_ILLUMINANCE_HYSTERESIS: 2.0,
         },
@@ -1046,7 +1046,7 @@ async def test_illuminance_edit_rejudges_a_held_reading_against_the_new_band(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
             CONF_NAME: "Edited Illuminance",
-            CONF_ILLUMINANCE_SENSOR: "sensor.lux_1",
+            CONF_ILLUMINANCE_SOURCE: "sensor.lux_1",
             CONF_ILLUMINANCE_THRESHOLD: 10.0,
             CONF_ILLUMINANCE_HYSTERESIS: 5.0,
         },
@@ -1075,7 +1075,7 @@ def _lux_entry(source: str = "sensor.old_lux") -> MockConfigEntry:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
             CONF_NAME: "Swapped Lux",
-            CONF_ILLUMINANCE_SENSOR: source,
+            CONF_ILLUMINANCE_SOURCE: source,
             CONF_ILLUMINANCE_THRESHOLD: 10.0,
             CONF_ILLUMINANCE_HYSTERESIS: 3.0,
         },
@@ -1099,7 +1099,7 @@ async def test_illuminance_source_swap_drops_the_old_sources_reading(
     await setup_entries(hass, entry)
     assert hass.states.get("binary_sensor.swapped_lux").state == "on"
 
-    await _edit_options(hass, entry, **{CONF_ILLUMINANCE_SENSOR: "sensor.new_lux"})
+    await _edit_options(hass, entry, **{CONF_ILLUMINANCE_SOURCE: "sensor.new_lux"})
     assert hass.states.get("binary_sensor.swapped_lux").state == "unavailable"
 
     # 8 lx is inside the band, where the old source's bright would have held.
@@ -1125,7 +1125,7 @@ async def test_illuminance_source_swap_judges_the_new_source_on_its_own(
     entry = _lux_entry()
     await setup_entries(hass, entry)
 
-    await _edit_options(hass, entry, **{CONF_ILLUMINANCE_SENSOR: "sensor.new_lux"})
+    await _edit_options(hass, entry, **{CONF_ILLUMINANCE_SOURCE: "sensor.new_lux"})
     assert hass.states.get("binary_sensor.swapped_lux").state == expected
 
 
@@ -1165,7 +1165,7 @@ async def test_illuminance_swap_is_remembered_across_a_restart(
     hass.states.async_set("sensor.old_lux", "100")
     entry = _lux_entry()
     await setup_entries(hass, entry)
-    await _edit_options(hass, entry, **{CONF_ILLUMINANCE_SENSOR: "sensor.new_lux"})
+    await _edit_options(hass, entry, **{CONF_ILLUMINANCE_SOURCE: "sensor.new_lux"})
     await restart_entries(hass, entry)
     assert hass.states.get("binary_sensor.swapped_lux").state == "unavailable"
 
@@ -1279,7 +1279,7 @@ async def test_illuminance_source_with_changed_entity_id_keeps_its_reading(
     await setup_entries(hass, entry)
 
     await change_entity_id(hass, LUX, "sensor.hall_lux")
-    assert entry_settings(entry)[CONF_ILLUMINANCE_SENSOR] == "sensor.hall_lux"
+    assert entry_settings(entry)[CONF_ILLUMINANCE_SOURCE] == "sensor.hall_lux"
     assert hass.states.get("binary_sensor.swapped_lux").state == "on"
     # Still on the bright side of the band, so the hold carried over.
     lux.set(8)
@@ -1333,7 +1333,7 @@ async def test_illuminance_first_reading_in_band_uses_bare_threshold(
             data={
                 CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
                 CONF_NAME: name,
-                CONF_ILLUMINANCE_SENSOR: source,
+                CONF_ILLUMINANCE_SOURCE: source,
                 CONF_ILLUMINANCE_THRESHOLD: 10.0,
                 CONF_ILLUMINANCE_HYSTERESIS: 2.0,
             },
@@ -1539,7 +1539,7 @@ class _LateRoom:
                 data={
                     CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
                     CONF_NAME: name,
-                    CONF_OCCUPANCY_SENSOR: source,
+                    CONF_OCCUPANCY_SOURCE: source,
                     CONF_OCCUPANCY_TIMEOUT: 1,
                     CONF_FALSE_DETECTION_GRACE: 0,
                 },
@@ -2542,7 +2542,7 @@ def _grace_occupancy_entry() -> MockConfigEntry:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Boot Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_FALSE_DETECTION_GRACE: 3,
         },
@@ -2674,7 +2674,7 @@ async def test_occupancy_does_not_seed_last_on_time_at_startup(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Boot Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_FALSE_DETECTION_GRACE: 3,
         },
@@ -2718,7 +2718,7 @@ async def test_occupancy_does_not_record_last_on_time_for_late_loading_source(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Late Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_FALSE_DETECTION_GRACE: 3,
         },
@@ -3124,7 +3124,7 @@ async def test_occupancy_source_swap_drops_the_old_sources_last_on_time(
     await settle(hass)
     freezer.tick(timedelta(seconds=5))
     await _edit_options(
-        hass, entry, **{CONF_OCCUPANCY_SENSOR: "binary_sensor.presence"}
+        hass, entry, **{CONF_OCCUPANCY_SOURCE: "binary_sensor.presence"}
     )
     state = hass.states.get("binary_sensor.boot_occupancy")
     assert state.state == "on"
@@ -3161,7 +3161,7 @@ async def test_occupancy_source_swap_does_not_carry_over_an_occupied_old_source(
         hass,
         entry,
         **{
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.presence",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.presence",
             CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT: unavailable_timeout,
         },
     )
@@ -3207,7 +3207,7 @@ async def test_occupancy_false_detection_clear_survives_a_reload(
         await restart_entries(hass, entry)
     else:
         await _edit_options(
-            hass, entry, **{CONF_OCCUPANCY_SENSOR: "binary_sensor.presence"}
+            hass, entry, **{CONF_OCCUPANCY_SOURCE: "binary_sensor.presence"}
         )
     await settle(hass)
     state = hass.states.get("binary_sensor.boot_occupancy")
@@ -3231,7 +3231,7 @@ async def test_light_false_off_delay_survives_an_occupancy_reload(
             data={
                 CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
                 CONF_NAME: name,
-                CONF_OCCUPANCY_SENSOR: source,
+                CONF_OCCUPANCY_SOURCE: source,
                 CONF_OCCUPANCY_TIMEOUT: 30,
                 CONF_FALSE_DETECTION_GRACE: 3,
             },
@@ -3392,7 +3392,7 @@ async def test_light_timer_after_a_clear_missed_during_an_occupancy_reload(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Virtual",
-            CONF_OCCUPANCY_SENSOR: motion.entity_id,
+            CONF_OCCUPANCY_SOURCE: motion.entity_id,
             CONF_OCCUPANCY_TIMEOUT: 1,
             CONF_FALSE_DETECTION_GRACE: 3,
         },
@@ -3569,7 +3569,7 @@ async def test_combined_keeps_an_occupied_constituent_that_dropped_out(
             data={
                 CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
                 CONF_NAME: name,
-                CONF_OCCUPANCY_SENSOR: source.entity_id,
+                CONF_OCCUPANCY_SOURCE: source.entity_id,
                 CONF_OCCUPANCY_TIMEOUT: 120,
                 CONF_FALSE_DETECTION_GRACE: 3,
             },

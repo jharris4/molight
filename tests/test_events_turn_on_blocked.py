@@ -16,7 +16,7 @@ from custom_components.molight.const import (
     REASON_DOOR,
     REASON_OCCUPANCY,
     REASON_SCHEDULE,
-    SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_TURN_OFF,
 )
 from tests.conftest import make_light_entry, settle, setup_entries
 from tests.events import record_events
@@ -85,7 +85,7 @@ async def test_a_gate_window_blocks_a_trigger(hass, trigger: str) -> None:
             occupancy=OCC,
             door=DOOR,
             schedule=SCHED,
-            schedule_mode=SCHEDULE_MODE_GATE,
+            schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
         ),
         binary_sensor__occ="off",
         binary_sensor__door="off",
@@ -111,7 +111,7 @@ async def test_going_dark_outside_a_gate_window_is_blocked(hass) -> None:
             illuminance=ILLUM,
             illuminance_mode=ILLUMINANCE_MODE_CONTROL,
             schedule=SCHED,
-            schedule_mode=SCHEDULE_MODE_GATE,
+            schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
         ),
         binary_sensor__occ="off",
         binary_sensor__illum="on",

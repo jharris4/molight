@@ -17,10 +17,10 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
-    CONF_ILLUMINANCE_SENSOR,
+    CONF_ILLUMINANCE_SOURCE,
     CONF_LIGHTS,
     CONF_NAME,
-    CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_ON_BUTTONS_SINGLE,
     CONF_TARGET_LIGHTS,
@@ -58,7 +58,7 @@ TYPE_ENTRIES: dict[str, tuple[dict, dict[str, int]]] = {
     ENTITY_TYPE_OCCUPANCY: (
         {
             CONF_NAME: "Init Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_init",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_init",
             CONF_OCCUPANCY_TIMEOUT: 30,
         },
         {"binary_sensor": 1, "event": 1},
@@ -73,7 +73,7 @@ TYPE_ENTRIES: dict[str, tuple[dict, dict[str, int]]] = {
     ENTITY_TYPE_ILLUMINANCE: (
         {
             CONF_NAME: "Init Illuminance",
-            CONF_ILLUMINANCE_SENSOR: "sensor.lux_init",
+            CONF_ILLUMINANCE_SOURCE: "sensor.lux_init",
         },
         {"binary_sensor": 1},
     ),

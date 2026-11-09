@@ -45,8 +45,8 @@ from custom_components.molight.const import (
     CONF_STANDBY_BRIGHTNESS,
     CONF_TIME_WINDOWS,
     CONF_TURN_OFF_TIMEOUT,
-    CONF_TURN_ON_SELECT_ENTITY,
-    CONF_TURN_ON_SELECT_OPTION,
+    CONF_TURN_ON_SELECTION_ENTITY,
+    CONF_TURN_ON_SELECTION_OPTION,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_DURATION,
     DOMAIN,
@@ -1731,14 +1731,14 @@ async def test_each_settings_set_applies_its_turn_on_selection(
         outside={
             CONF_TURN_OFF_TIMEOUT: 60,
             CONF_OCCUPANCY_SENSOR: outside_occupancy,
-            CONF_TURN_ON_SELECT_ENTITY: "select.light_mode",
-            CONF_TURN_ON_SELECT_OPTION: "Day",
+            CONF_TURN_ON_SELECTION_ENTITY: "select.light_mode",
+            CONF_TURN_ON_SELECTION_OPTION: "Day",
         },
         inside={
             CONF_TURN_OFF_TIMEOUT: 60,
             CONF_OCCUPANCY_SENSOR: inside_occupancy,
-            CONF_TURN_ON_SELECT_ENTITY: "select.light_mode",
-            CONF_TURN_ON_SELECT_OPTION: "Night",
+            CONF_TURN_ON_SELECTION_ENTITY: "select.light_mode",
+            CONF_TURN_ON_SELECTION_OPTION: "Night",
         },
     )
     await setup_entries(hass, entry)
@@ -1780,8 +1780,8 @@ async def test_schedule_end_takes_over_a_turn_on_waiting_for_its_selection(
         inside={
             CONF_TURN_OFF_TIMEOUT: 600,
             CONF_OCCUPANCY_SENSOR: inside_occupancy,
-            CONF_TURN_ON_SELECT_ENTITY: "select.light_mode",
-            CONF_TURN_ON_SELECT_OPTION: "Night",
+            CONF_TURN_ON_SELECTION_ENTITY: "select.light_mode",
+            CONF_TURN_ON_SELECTION_OPTION: "Night",
         },
     )
     await setup_entries(hass, entry)
@@ -1839,8 +1839,8 @@ async def test_schedule_end_takes_over_a_virtual_turn_on_waiting_for_its_selecti
         outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_OCCUPANCY_SENSOR: outside_occupancy},
         inside={
             CONF_TURN_OFF_TIMEOUT: 600,
-            CONF_TURN_ON_SELECT_ENTITY: "select.light_mode",
-            CONF_TURN_ON_SELECT_OPTION: "Night",
+            CONF_TURN_ON_SELECTION_ENTITY: "select.light_mode",
+            CONF_TURN_ON_SELECTION_OPTION: "Night",
         },
     )
     await setup_entries(hass, entry)
@@ -1892,8 +1892,8 @@ async def test_held_schedule_end_off_waits_for_a_virtual_turn_on_still_waiting(
         outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_KEEP_ON_ENTITIES: [keep_on]},
         inside={
             CONF_TURN_OFF_TIMEOUT: 600,
-            CONF_TURN_ON_SELECT_ENTITY: "select.light_mode",
-            CONF_TURN_ON_SELECT_OPTION: "Night",
+            CONF_TURN_ON_SELECTION_ENTITY: "select.light_mode",
+            CONF_TURN_ON_SELECTION_OPTION: "Night",
         },
     )
     await setup_entries(hass, entry)
@@ -1943,8 +1943,8 @@ async def test_hold_release_applies_a_held_end_off_to_a_waiting_turn_on(
         inside={
             CONF_TURN_OFF_TIMEOUT: 600,
             CONF_OCCUPANCY_SENSOR: occupancy,
-            CONF_TURN_ON_SELECT_ENTITY: "select.light_mode",
-            CONF_TURN_ON_SELECT_OPTION: "Night",
+            CONF_TURN_ON_SELECTION_ENTITY: "select.light_mode",
+            CONF_TURN_ON_SELECTION_OPTION: "Night",
         },
     )
     await setup_entries(hass, entry)
@@ -2003,8 +2003,8 @@ async def test_waiting_turn_on_cancelled_by_a_schedule_end_reports_off(
         inside={
             CONF_TURN_OFF_TIMEOUT: 600,
             CONF_OCCUPANCY_SENSOR: occupancy,
-            CONF_TURN_ON_SELECT_ENTITY: "select.light_mode",
-            CONF_TURN_ON_SELECT_OPTION: "Night",
+            CONF_TURN_ON_SELECTION_ENTITY: "select.light_mode",
+            CONF_TURN_ON_SELECTION_OPTION: "Night",
         },
     )
     await setup_entries(hass, entry)

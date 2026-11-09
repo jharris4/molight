@@ -531,8 +531,8 @@ async def test_brightness_steps_add_up_while_the_turn_on_selection_waits(
     light = make_light_entry(
         name="Test Light",
         lights=["light.living_room"],
-        turn_on_select_entity="select.scene",
-        turn_on_select_option="Night",
+        turn_on_selection_entity="select.scene",
+        turn_on_selection_option="Night",
     )
     remote = _remote_entry(**{CONF_BRIGHTNESS_UP_BUTTONS_SINGLE: ["event.pico_raise"]})
     await setup_entries(hass, light, remote)
@@ -813,8 +813,8 @@ async def test_brightness_steps_add_up_while_a_click_ends_a_warning(
     light = make_light_entry(
         name="Test Light",
         lights=["light.living_room"],
-        turn_on_select_entity="select.scene",
-        turn_on_select_option="Night",
+        turn_on_selection_entity="select.scene",
+        turn_on_selection_option="Night",
         **STAGES[stage][0],
     )
     remote = _remote_entry(

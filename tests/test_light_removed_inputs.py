@@ -27,10 +27,10 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
-    CONF_ILLUMINANCE_SENSOR,
+    CONF_ILLUMINANCE_SOURCE,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_NAME,
-    CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     DOMAIN,
     DOOR_MODE_OPEN,
@@ -43,7 +43,7 @@ from custom_components.molight.const import (
     REASON_GONE,
     RELOAD_GRACE,
     SCHEDULE_MODE_FOLLOW,
-    SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_TURN_OFF,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
     STATE_IDLE,
@@ -200,7 +200,7 @@ async def first_reading_while_open_door_awaits_its_reload(
     ]
     config = {
         "illuminance": {"illuminance": source},
-        "schedule": {"schedule": source, "schedule_mode": SCHEDULE_MODE_GATE},
+        "schedule": {"schedule": source, "schedule_mode": SCHEDULE_MODE_GATE_TURN_OFF},
     }[role]
     await provide(hass, "unregistered", RealBinary("input"))
     hass.states.async_set(MEMBER, "off")
@@ -652,8 +652,8 @@ async def test_real_light_going_missing_does_not_cancel_a_waiting_resend(
         make_light_entry(
             lights=[MEMBER, "light.real_2"],
             timeout=60,
-            turn_on_select_entity="select.preset",
-            turn_on_select_option="Cozy",
+            turn_on_selection_entity="select.preset",
+            turn_on_selection_option="Cozy",
         ),
     )
     await settle(hass)
@@ -869,7 +869,7 @@ async def test_sensor_whose_entry_is_disabled_stops_holding(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Room Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion",
             CONF_OCCUPANCY_TIMEOUT: 30,
         },
     )
@@ -923,7 +923,7 @@ def lux_entry() -> MockConfigEntry:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
             CONF_NAME: "Room Lux",
-            CONF_ILLUMINANCE_SENSOR: LUX,
+            CONF_ILLUMINANCE_SOURCE: LUX,
             CONF_ILLUMINANCE_THRESHOLD: 10.0,
         },
     )
@@ -1081,7 +1081,7 @@ async def test_illuminance_source_change_to_one_not_reporting_lights_the_room(
     calls = record_service_calls(hass)
     options = {k: v for k, v in sensor.data.items() if k != CONF_ENTITY_TYPE}
     hass.config_entries.async_update_entry(
-        sensor, options={**options, CONF_ILLUMINANCE_SENSOR: "sensor.new_lux"}
+        sensor, options={**options, CONF_ILLUMINANCE_SOURCE: "sensor.new_lux"}
     )
     await settle(hass)
     assert hass.states.get(ROOM_LUX).state == "unavailable"

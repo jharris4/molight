@@ -38,7 +38,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_SCHEDULE,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_MODE_FOLLOW,
-    SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_TURN_OFF,
     STATE_IDLE,
 )
 from tests.conftest import (
@@ -1564,7 +1564,7 @@ async def test_schedule_gated_light_stays_gated_by_a_sunset_past_the_fixed_end(
         name="Desk Lamp",
         occupancy="binary_sensor.room_occupancy",
         schedule="binary_sensor.night_schedule",
-        schedule_mode=SCHEDULE_MODE_GATE,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
     )
     schedule = _schedule_entry([{"start": _SUNSET, "end": _at("21:00")}])
     await setup_entries(hass, schedule, light)
@@ -2215,7 +2215,7 @@ async def test_schedule_gated_light_follows_a_time_zone_change(
         name="Desk Lamp",
         occupancy=occupancy,
         schedule=NIGHT,
-        schedule_mode=SCHEDULE_MODE_GATE,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
     )
     await setup_entries(hass, _schedule_entry([_window("18:00", "23:00")]), light)
 

@@ -26,6 +26,7 @@ from custom_components.molight.const import (
     CONF_FALSE_DETECTION_GRACE,
     CONF_NAME,
     CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_SCHEDULE_MODE,
     CONF_SCHEDULE_SENSOR,
@@ -45,9 +46,9 @@ from custom_components.molight.const import (
     SCHEDULE_END_ACTION_SWITCH,
     SCHEDULE_END_ACTION_TURN_OFF,
     SCHEDULE_MODE_FOLLOW,
-    SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
     SCHEDULE_MODE_GATE_SWITCH,
+    SCHEDULE_MODE_GATE_TURN_OFF,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
     STATE_EFFECT,
@@ -225,7 +226,7 @@ async def test_restart_occupied_outside_gate_window_adopts_active(
     await setup_entries(
         hass,
         make_light_entry(
-            occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE
+            occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF
         ),
     )
     await settle(hass)
@@ -245,7 +246,7 @@ async def test_restart_occupied_inside_gate_window_goes_occupied(
     await setup_entries(
         hass,
         make_light_entry(
-            occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE
+            occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF
         ),
     )
     await settle(hass)
@@ -425,7 +426,7 @@ async def test_manual_off_stands_over_combined_presence_that_loads_late(
             data={
                 CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
                 CONF_NAME: "Virtual",
-                CONF_OCCUPANCY_SENSOR: "binary_sensor.late_motion",
+                CONF_OCCUPANCY_SOURCE: "binary_sensor.late_motion",
                 CONF_OCCUPANCY_TIMEOUT: 1,
                 CONF_FALSE_DETECTION_GRACE: 0,
             },
@@ -615,7 +616,8 @@ async def test_restart_applies_missed_window_end(hass: HomeAssistant) -> None:
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize(
-    "mode", [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP]
+    "mode",
+    [SCHEDULE_MODE_GATE_TURN_OFF, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
 )
 async def test_restart_outside_a_gate_window_keeps_a_bright_off_for_the_dark_edge(
     hass: HomeAssistant, freezer, mode: str
@@ -770,7 +772,9 @@ async def test_follow_marker_does_not_survive_a_spell_in_gate_mode(
     """A light lit manually after its window ended in gate mode is not turned
     off when it is switched back to follow mode."""
     entry = await _lit_in_follow_window(hass)
-    await _edit_options(hass, entry, **{CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE})
+    await _edit_options(
+        hass, entry, **{CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE_TURN_OFF}
+    )
     assert _state(hass).attributes["schedule_window_start"] is None
 
     hass.states.async_set(SCHED, "off")  # the gate end turns it off
@@ -1274,8 +1278,16 @@ async def test_real_restart_after_a_manual_on_outside_the_window(
     )
 
 
-_GATE_MODES = (SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP)
-_OFF_AT_END = (SCHEDULE_MODE_FOLLOW, SCHEDULE_MODE_GATE, SCHEDULE_END_ACTION_TURN_OFF)
+_GATE_MODES = (
+    SCHEDULE_MODE_GATE_TURN_OFF,
+    SCHEDULE_MODE_GATE_SWITCH,
+    SCHEDULE_MODE_GATE_KEEP,
+)
+_OFF_AT_END = (
+    SCHEDULE_MODE_FOLLOW,
+    SCHEDULE_MODE_GATE_TURN_OFF,
+    SCHEDULE_END_ACTION_TURN_OFF,
+)
 
 
 def _setup_entry(setup: str) -> MockConfigEntry:
@@ -1448,7 +1460,7 @@ async def test_match_choice_is_ignored_outside_follow_mode(hass: HomeAssistant) 
         hass,
         make_light_entry(
             schedule=SCHED,
-            schedule_mode=SCHEDULE_MODE_GATE,
+            schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
             match_schedule_after_restart=BOTH,
         ),
     )

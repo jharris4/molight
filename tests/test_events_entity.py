@@ -17,7 +17,7 @@ from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
     CONF_LIGHTS,
     CONF_NAME,
-    CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_TRIGGER_SENSORS,
     CONF_TURN_OFF_TIMEOUT,
@@ -59,7 +59,7 @@ def _entry(entity_type: str, **data) -> MockConfigEntry:
             lambda: _entry(
                 ENTITY_TYPE_OCCUPANCY,
                 **{
-                    CONF_OCCUPANCY_SENSOR: "binary_sensor.pir",
+                    CONF_OCCUPANCY_SOURCE: "binary_sensor.pir",
                     CONF_OCCUPANCY_TIMEOUT: 30,
                 },
             ),
@@ -94,7 +94,7 @@ async def test_events_entity_is_created_with_its_owner_types(
 @pytest.mark.parametrize(
     "make",
     [
-        lambda: _entry(ENTITY_TYPE_ILLUMINANCE, illuminance_sensor="sensor.lux"),
+        lambda: _entry(ENTITY_TYPE_ILLUMINANCE, illuminance_source="sensor.lux"),
         lambda: _entry(
             ENTITY_TYPE_SCHEDULE,
             time_windows=[{"start": {"time": "07:00"}, "end": {"time": "22:00"}}],
@@ -214,7 +214,7 @@ async def test_occupancy_sensor_sends_to_its_own_entity(hass, freezer) -> None:
     sensor = _entry(
         ENTITY_TYPE_OCCUPANCY,
         **{
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.pir",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.pir",
             CONF_OCCUPANCY_TIMEOUT: 30,
             "false_detection_grace": 3,
         },

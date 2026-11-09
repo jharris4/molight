@@ -41,6 +41,7 @@ from custom_components.molight.const import (
     CONF_FALSE_DETECTION_GRACE,
     CONF_ILLUMINANCE_HYSTERESIS,
     CONF_ILLUMINANCE_SENSOR,
+    CONF_ILLUMINANCE_SOURCE,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_KEEP_ON_ENTITIES,
@@ -49,6 +50,7 @@ from custom_components.molight.const import (
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
     CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_ON_BUTTONS_SINGLE,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
@@ -62,9 +64,9 @@ from custom_components.molight.const import (
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     CONF_TURN_OFF_TIMEOUT,
-    CONF_TURN_ON_SELECT_ENTITY,
-    CONF_TURN_ON_SELECT_OPTION,
-    CONF_TURN_ON_SELECT_SOURCE_ENTITY,
+    CONF_TURN_ON_SELECTION_ENTITY,
+    CONF_TURN_ON_SELECTION_OPTION,
+    CONF_TURN_ON_SELECTION_SOURCE_ENTITY,
     DOMAIN,
     DOOR_MODE_OPEN_CLOSE,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
@@ -79,7 +81,7 @@ from custom_components.molight.const import (
     SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_END_ACTION_TURN_OFF,
     SCHEDULE_MODE_FOLLOW,
-    SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_TURN_OFF,
 )
 from custom_components.molight.helpers import (
     entity_id_changed_to,
@@ -130,7 +132,7 @@ def occupancy_entry(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: name,
-            CONF_OCCUPANCY_SENSOR: source,
+            CONF_OCCUPANCY_SOURCE: source,
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_FALSE_DETECTION_GRACE: 0,
             **cfg,
@@ -163,9 +165,9 @@ _LIGHT_REFERENCES = {
     CONF_ILLUMINANCE_SENSOR: "binary_sensor.bright",
     CONF_DOOR_SENSOR: "binary_sensor.door",
     CONF_KEEP_ON_ENTITIES: ["switch.keep_on_a", "switch.keep_on_b"],
-    CONF_TURN_ON_SELECT_ENTITY: "select.target",
-    CONF_TURN_ON_SELECT_OPTION: "Cozy",
-    CONF_TURN_ON_SELECT_SOURCE_ENTITY: "select.source",
+    CONF_TURN_ON_SELECTION_ENTITY: "select.target",
+    CONF_TURN_ON_SELECTION_OPTION: "Cozy",
+    CONF_TURN_ON_SELECTION_SOURCE_ENTITY: "select.source",
 }
 _REFERENCING_SETTINGS = {
     "light": {
@@ -174,7 +176,7 @@ _REFERENCING_SETTINGS = {
         CONF_LIGHTS: ["light.a", "light.b"],
         CONF_TURN_OFF_TIMEOUT: 60,
         CONF_SCHEDULE_SENSOR: "binary_sensor.sched",
-        CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
+        CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE_TURN_OFF,
         **_LIGHT_REFERENCES,
     },
     "scheduled_light": {
@@ -196,7 +198,7 @@ _REFERENCING_SETTINGS = {
     "occupancy": {
         CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
         CONF_NAME: "Refs Occupancy",
-        CONF_OCCUPANCY_SENSOR: "binary_sensor.motion",
+        CONF_OCCUPANCY_SOURCE: "binary_sensor.motion",
     },
     "combined_occupancy": {
         CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
@@ -207,7 +209,7 @@ _REFERENCING_SETTINGS = {
     "illuminance": {
         CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
         CONF_NAME: "Refs Illuminance",
-        CONF_ILLUMINANCE_SENSOR: "sensor.lux",
+        CONF_ILLUMINANCE_SOURCE: "sensor.lux",
     },
     "schedule": {
         CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
@@ -231,7 +233,7 @@ _REFERENCING_SETTINGS = {
         },
     },
 }
-_NOT_ENTITY_IDS = (CONF_ENTITY_TYPE, CONF_NAME, CONF_TURN_ON_SELECT_OPTION)
+_NOT_ENTITY_IDS = (CONF_ENTITY_TYPE, CONF_NAME, CONF_TURN_ON_SELECTION_OPTION)
 
 
 def _entity_ids(cfg: Any) -> set[str]:
@@ -532,7 +534,7 @@ async def test_maintain_occupancy_and_illuminance_sensors_keep_roles_on_new_enti
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
             CONF_NAME: "Room Bright",
-            CONF_ILLUMINANCE_SENSOR: "sensor.lux",
+            CONF_ILLUMINANCE_SOURCE: "sensor.lux",
             CONF_ILLUMINANCE_THRESHOLD: 10.0,
         },
     )
@@ -578,9 +580,9 @@ async def test_select_entities_on_new_entity_ids_still_apply_the_turn_on_selecti
     await setup_entries(
         hass,
         make_light_entry(
-            turn_on_select_entity="select.preset",
-            turn_on_select_option="Cozy",
-            turn_on_select_source_entity="select.mood",
+            turn_on_selection_entity="select.preset",
+            turn_on_selection_option="Cozy",
+            turn_on_selection_source_entity="select.mood",
         ),
     )
     await change_entity_id(hass, "select.preset", "select.wled_preset")
@@ -674,7 +676,7 @@ async def test_gate_schedule_with_changed_entity_id_still_gates(
         make_light_entry(
             occupancy=OCCUPANCY,
             schedule="binary_sensor.day",
-            schedule_mode=SCHEDULE_MODE_GATE,
+            schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
         ),
     )
     await change_entity_id(hass, "binary_sensor.day", "binary_sensor.daytime")
@@ -761,7 +763,7 @@ async def test_motion_source_with_changed_entity_id_continues_the_same_visit(
     motion.added_gate.set()
     await settle(hass)
 
-    assert entry_settings(entry)[CONF_OCCUPANCY_SENSOR] == "binary_sensor.hall_motion"
+    assert entry_settings(entry)[CONF_OCCUPANCY_SOURCE] == "binary_sensor.hall_motion"
     state = hass.states.get(OCCUPANCY)
     assert state.state == "on"
     assert state.attributes["last_on_time"] == before["last_on_time"]
@@ -949,7 +951,7 @@ async def test_lux_source_with_changed_entity_id_keeps_the_reading(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
             CONF_NAME: "Room Bright",
-            CONF_ILLUMINANCE_SENSOR: "sensor.lux",
+            CONF_ILLUMINANCE_SOURCE: "sensor.lux",
             CONF_ILLUMINANCE_THRESHOLD: 10.0,
         },
     )
@@ -957,7 +959,7 @@ async def test_lux_source_with_changed_entity_id_keeps_the_reading(
     assert hass.states.get("binary_sensor.room_bright").state == "on"
 
     await change_entity_id(hass, "sensor.lux", "sensor.window_lux")
-    assert entry_settings(entry)[CONF_ILLUMINANCE_SENSOR] == "sensor.window_lux"
+    assert entry_settings(entry)[CONF_ILLUMINANCE_SOURCE] == "sensor.window_lux"
     assert hass.states.get("binary_sensor.room_bright").state == "on"
     lux.set(1)
     await settle(hass)
@@ -980,7 +982,7 @@ async def test_entity_id_change_keeps_an_illuminance_sensors_side_of_the_band(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
             CONF_NAME: "Room Bright",
-            CONF_ILLUMINANCE_SENSOR: "sensor.lux",
+            CONF_ILLUMINANCE_SOURCE: "sensor.lux",
             CONF_ILLUMINANCE_THRESHOLD: 10.0,
             CONF_ILLUMINANCE_HYSTERESIS: 3.0,
         },
@@ -1278,7 +1280,7 @@ async def test_timeout_check_and_removal_follow_a_sensor_whose_entity_id_changed
         result["flow_id"],
         {
             CONF_NAME: "Room Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion",
             CONF_OCCUPANCY_TIMEOUT: 120,
             SECTION_ADVANCED: {},
         },

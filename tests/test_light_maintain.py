@@ -18,7 +18,7 @@ from pytest_homeassistant_custom_component.common import async_fire_time_changed
 from custom_components.molight.const import (
     ILLUMINANCE_MODE_GATE_ONLY,
     SCHEDULE_MODE_FOLLOW,
-    SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_TURN_OFF,
     STATE_COUNTDOWN,
     STATE_IDLE,
     STATE_OCCUPIED,
@@ -387,7 +387,7 @@ async def test_gate_window_end_forces_off_while_maintained(
 ) -> None:
     """A gate-mode window ending turns the lights off even while maintained."""
     entry = make_light_entry(
-        maintain=MAINT, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE
+        maintain=MAINT, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF
     )
     hass.states.async_set(SCHED, "on")
     hass.states.async_set(MAINT, "off")
@@ -630,7 +630,7 @@ async def test_maintain_clear_ignores_gated_occupancy(
             occupancy=OCC,
             maintain=MAINT,
             schedule=SCHED,
-            schedule_mode=SCHEDULE_MODE_GATE,
+            schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
             timeout=10,
         )
         hass.states.async_set(SCHED, "off")

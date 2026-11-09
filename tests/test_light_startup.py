@@ -57,14 +57,14 @@ from custom_components.molight.const import (
     CONF_OCCUPANCY_SENSOR,
     CONF_STANDBY_BRIGHTNESS,
     CONF_TURN_OFF_TIMEOUT,
-    CONF_TURN_ON_SELECT_ENTITY,
-    CONF_TURN_ON_SELECT_OPTION,
+    CONF_TURN_ON_SELECTION_ENTITY,
+    CONF_TURN_ON_SELECTION_OPTION,
     DOMAIN,
     ILLUMINANCE_MODE_CONTROL,
     SCHEDULE_END_ACTION_SWITCH,
     SCHEDULE_END_ACTION_TURN_OFF,
     SCHEDULE_MODE_FOLLOW,
-    SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_TURN_OFF,
     STATE_ACTIVE,
     STATE_IDLE,
     STATE_OCCUPIED,
@@ -1386,8 +1386,8 @@ async def test_raise_waiting_for_its_selection_at_the_seed_replaces_standby(
     data = dict(entry.data)
     inside = {
         **data[CONF_INSIDE_SCHEDULE_SETTINGS],
-        CONF_TURN_ON_SELECT_ENTITY: "select.scene",
-        CONF_TURN_ON_SELECT_OPTION: "Night",
+        CONF_TURN_ON_SELECTION_ENTITY: "select.scene",
+        CONF_TURN_ON_SELECTION_OPTION: "Night",
     }
     hass.config_entries.async_update_entry(
         entry, data={**data, CONF_INSIDE_SCHEDULE_SETTINGS: inside}
@@ -1582,7 +1582,7 @@ async def test_late_setup_keeps_a_held_gate_end_under_the_saved_auto_off_hold(
     """A schedule end off left pending by the switch stays pending when set up late."""
     _Members(hass, [REAL], {})
     hass.states.async_set(SCHED, "on")
-    entry = make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE)
+    entry = make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF)
     await setup_entries(hass, entry)
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True

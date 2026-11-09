@@ -27,7 +27,7 @@ from custom_components.molight.const import (
     CONF_FALSE_DETECTION_GRACE,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
-    CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_TRIGGER_SENSORS,
     DOMAIN,
@@ -61,7 +61,7 @@ def _occupancy(
     data = {
         CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
         CONF_NAME: name,
-        CONF_OCCUPANCY_SENSOR: source,
+        CONF_OCCUPANCY_SOURCE: source,
         CONF_OCCUPANCY_TIMEOUT: 30,
         CONF_FALSE_DETECTION_GRACE: 0,
     }
@@ -203,7 +203,7 @@ async def _edit_source(hass: HomeAssistant, entry: MockConfigEntry, source: str)
         result["flow_id"],
         {
             CONF_NAME: "Seen",
-            CONF_OCCUPANCY_SENSOR: source,
+            CONF_OCCUPANCY_SOURCE: source,
             CONF_OCCUPANCY_TIMEOUT: 30,
             SECTION_ADVANCED: {},
         },
@@ -223,8 +223,8 @@ async def test_editing_an_occupancy_sensor_rejects_a_source_that_includes_it(
 
     result = await _edit_source(hass, entry, GROUP)
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {CONF_OCCUPANCY_SENSOR: "occupancy_source_cycle"}
-    assert entry_settings(entry)[CONF_OCCUPANCY_SENSOR] == REAL
+    assert result["errors"] == {CONF_OCCUPANCY_SOURCE: "occupancy_source_cycle"}
+    assert entry_settings(entry)[CONF_OCCUPANCY_SOURCE] == REAL
 
 
 @pytest.mark.asyncio
@@ -266,13 +266,13 @@ async def test_creating_an_occupancy_sensor_rejects_a_group_that_names_its_id(
     result = await _start_schedule(hass, ENTITY_TYPE_OCCUPANCY)
     values = {
         CONF_NAME: "Something Else" if named == "entity_id" else "Seen",
-        CONF_OCCUPANCY_SENSOR: GROUP,
+        CONF_OCCUPANCY_SOURCE: GROUP,
         CONF_OCCUPANCY_TIMEOUT: 30,
         SECTION_ADVANCED: {CONF_ENTITY_ID: "seen"} if named == "entity_id" else {},
     }
     result = await hass.config_entries.flow.async_configure(result["flow_id"], values)
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {CONF_OCCUPANCY_SENSOR: "occupancy_source_cycle"}
+    assert result["errors"] == {CONF_OCCUPANCY_SOURCE: "occupancy_source_cycle"}
 
     # Under another entity ID the same group is a valid source.
     result = await hass.config_entries.flow.async_configure(

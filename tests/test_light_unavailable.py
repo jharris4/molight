@@ -31,10 +31,12 @@ from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
     CONF_ILLUMINANCE_SENSOR,
+    CONF_ILLUMINANCE_SOURCE,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
     CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_SCHEDULE_DEFINITION,
     CONF_SCHEDULE_SOURCE,
@@ -52,9 +54,9 @@ from custom_components.molight.const import (
     REASON_REJECTED,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_MODE_FOLLOW,
-    SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
     SCHEDULE_MODE_GATE_SWITCH,
+    SCHEDULE_MODE_GATE_TURN_OFF,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
     STATE_EFFECT,
@@ -973,7 +975,7 @@ async def test_occupancy_recovery_applies_dark_that_fell_during_outage(
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize(
     "mode",
-    [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
+    [SCHEDULE_MODE_GATE_TURN_OFF, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
 )
 async def test_occupancy_recovery_applies_a_window_started_during_outage(
     hass: HomeAssistant, freezer, mode: str
@@ -1186,7 +1188,7 @@ async def test_occupancy_sensor_reload_changes_nothing(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Chain Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
         },
     )
@@ -1276,7 +1278,7 @@ async def test_combined_occupancy_constituent_reload_changes_nothing(
             data={
                 CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
                 CONF_NAME: name,
-                CONF_OCCUPANCY_SENSOR: source,
+                CONF_OCCUPANCY_SOURCE: source,
                 CONF_OCCUPANCY_TIMEOUT: 45,
             },
         )
@@ -1464,7 +1466,7 @@ async def test_schedule_briefly_unavailable_respects_manual_off(
     "mode",
     [
         SCHEDULE_MODE_FOLLOW,
-        SCHEDULE_MODE_GATE,
+        SCHEDULE_MODE_GATE_TURN_OFF,
         SCHEDULE_MODE_GATE_SWITCH,
         SCHEDULE_MODE_GATE_KEEP,
     ],
@@ -1600,7 +1602,7 @@ async def test_schedule_outage_spanning_a_window_end_applies_it(
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize(
     "mode",
-    [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
+    [SCHEDULE_MODE_GATE_TURN_OFF, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
 )
 @pytest.mark.parametrize("bad", ["unavailable", "unknown"])
 async def test_gate_briefly_unavailable_inside_window_respects_manual_off(
@@ -1639,7 +1641,7 @@ async def test_gate_briefly_unavailable_inside_window_respects_manual_off(
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize(
     "mode",
-    [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
+    [SCHEDULE_MODE_GATE_TURN_OFF, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
 )
 @pytest.mark.parametrize("trigger", ["occupancy", "door"])
 async def test_gate_recovery_applies_a_start_the_outage_blocked(
@@ -1694,7 +1696,7 @@ async def test_gate_recovery_respects_a_manual_off_after_the_blocked_start(
             door=door,
             door_mode=DOOR_MODE_OPEN_CLOSE,
             schedule=SCHED,
-            schedule_mode=SCHEDULE_MODE_GATE,
+            schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
         ),
     )
 
@@ -1737,7 +1739,7 @@ async def test_gate_briefly_unavailable_with_door_standing_open_respects_manual_
             door=door,
             door_mode=DOOR_MODE_OPEN_CLOSE,
             schedule=SCHED,
-            schedule_mode=SCHEDULE_MODE_GATE,
+            schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
         ),
     )
     hass.states.async_set(door, "on")
@@ -1768,7 +1770,7 @@ async def test_gate_recovery_adopts_light_turned_on_during_outage(
     await setup_entries(
         hass,
         make_light_entry(
-            occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE
+            occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF
         ),
     )
     await hass.services.async_call(
@@ -1879,7 +1881,7 @@ async def test_gate_and_turn_off_outage_does_not_force_off_on_hold_release(
         hass,
         make_light_entry(
             schedule=SCHED,
-            schedule_mode=SCHEDULE_MODE_GATE,
+            schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
             keep_on_entities=[KEEP_ON],
         ),
     )
@@ -1897,7 +1899,7 @@ async def test_gate_and_turn_off_outage_does_not_force_off_on_hold_release(
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize(
     "mode",
-    [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
+    [SCHEDULE_MODE_GATE_TURN_OFF, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
 )
 async def test_gate_outage_preserves_on_light_but_blocks_new_turn_on(
     hass: HomeAssistant, mode: str
@@ -1944,7 +1946,7 @@ async def test_source_dropout_releases_light_via_virtual_occupancy(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Chain Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
         },
     )
@@ -2547,7 +2549,8 @@ async def test_gate_mode_member_recovery_is_unchanged(hass: HomeAssistant) -> No
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(REAL, "off")
     await setup_entries(
-        hass, make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE)
+        hass,
+        make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF),
     )
     await settle(hass)
 
@@ -2575,7 +2578,7 @@ def _daylight_entry() -> MockConfigEntry:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
             CONF_NAME: "Daylight",
-            CONF_ILLUMINANCE_SENSOR: LUX,
+            CONF_ILLUMINANCE_SOURCE: LUX,
             CONF_ILLUMINANCE_THRESHOLD: 100,
         },
     )
@@ -2677,7 +2680,7 @@ def _virtual_occupancy_entry() -> MockConfigEntry:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Virtual Occupancy",
-            CONF_OCCUPANCY_SENSOR: MOTION,
+            CONF_OCCUPANCY_SOURCE: MOTION,
             CONF_OCCUPANCY_TIMEOUT: 0,
             CONF_FALSE_DETECTION_GRACE: 0,
         },
@@ -2861,7 +2864,7 @@ async def _occupied_room_loses_gate(
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize(
     "mode",
-    [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
+    [SCHEDULE_MODE_GATE_TURN_OFF, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
 )
 @pytest.mark.parametrize("how", ["source", "reload"])
 async def test_gate_outage_keeps_the_hold_of_an_occupied_room(
@@ -2900,7 +2903,7 @@ async def test_gate_window_that_ended_during_its_outage_turns_the_room_off(
 ) -> None:
     """A Gate and turn off schedule back off is a real window end, whoever is in the
     room."""
-    await _occupied_room_loses_gate(hass, SCHEDULE_MODE_GATE, "source")
+    await _occupied_room_loses_gate(hass, SCHEDULE_MODE_GATE_TURN_OFF, "source")
     hass.states.async_set(KEEP_ON, "off")
     await settle(hass)
     assert _state(hass).state == "on"
@@ -2919,7 +2922,9 @@ async def test_gate_outage_outside_the_window_keeps_occupancy_gated(
 ) -> None:
     """Last known outside its window, an unreadable Gate and turn off schedule still
     gates."""
-    await _occupied_room_loses_gate(hass, SCHEDULE_MODE_GATE, "source", window="off")
+    await _occupied_room_loses_gate(
+        hass, SCHEDULE_MODE_GATE_TURN_OFF, "source", window="off"
+    )
     hass.states.async_set(KEEP_ON, "off")
     hass.states.async_set(DOOR, "off")
     await settle(hass)
@@ -2973,7 +2978,7 @@ async def _reload_sensor(hass: HomeAssistant, entries: list) -> None:
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize(
     "mode",
-    [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
+    [SCHEDULE_MODE_GATE_TURN_OFF, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
 )
 @pytest.mark.parametrize("kind", ["raw", "virtual", "combined", "nested"])
 @pytest.mark.parametrize("fresh", [False, True])
@@ -3036,7 +3041,7 @@ async def test_gate_recovery_tells_an_unavailable_door_from_an_opening(
         door=DOOR,
         door_mode=DOOR_MODE_OPEN_CLOSE,
         schedule=WINDOW,
-        schedule_mode=SCHEDULE_MODE_GATE,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
     )
     await setup_entries(hass, _window_entry(), light)
     freezer.tick(timedelta(seconds=1))
@@ -3093,7 +3098,7 @@ async def _reseed_light(hass: HomeAssistant, light: MockConfigEntry, how: str) -
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize(
     "mode",
-    [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
+    [SCHEDULE_MODE_GATE_TURN_OFF, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
 )
 @pytest.mark.parametrize(
     ("kind", "how"),
@@ -3172,7 +3177,7 @@ async def test_gate_recovery_after_the_light_seeds_again_with_the_door_held_open
         door=DOOR,
         door_mode=DOOR_MODE_OPEN_CLOSE,
         schedule=SCHED,
-        schedule_mode=SCHEDULE_MODE_GATE,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
     )
     await setup_entries(hass, light)
     if manual_off:
@@ -3204,7 +3209,7 @@ async def test_gate_recovery_after_the_light_seeds_again_with_the_door_held_open
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize(
     "mode",
-    [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
+    [SCHEDULE_MODE_GATE_TURN_OFF, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
 )
 @pytest.mark.parametrize("how", ["reload", "restart"])
 async def test_gate_start_an_outage_blocked_is_applied_after_the_light_seeds_again(
@@ -3233,7 +3238,9 @@ async def test_gate_start_an_outage_blocked_is_applied_after_the_light_seeds_aga
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-@pytest.mark.parametrize("mode", [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH])
+@pytest.mark.parametrize(
+    "mode", [SCHEDULE_MODE_GATE_TURN_OFF, SCHEDULE_MODE_GATE_SWITCH]
+)
 @pytest.mark.parametrize("how", ["reload", "restart"])
 async def test_gate_reading_off_after_the_light_seeds_again_ends_no_window(
     hass: HomeAssistant, freezer, mode: str, how: str

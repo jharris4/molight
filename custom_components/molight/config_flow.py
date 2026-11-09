@@ -63,6 +63,7 @@ from .const import (
     CONF_ILLUMINANCE_HYSTERESIS,
     CONF_ILLUMINANCE_MODE,
     CONF_ILLUMINANCE_SENSOR,
+    CONF_ILLUMINANCE_SOURCE,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_KEEP_ON_ENTITIES,
@@ -72,6 +73,7 @@ from .const import (
     CONF_MATCH_SCHEDULE_AFTER_RESTART,
     CONF_NAME,
     CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_OCCUPANCY_TURN_ON,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
@@ -92,9 +94,9 @@ from .const import (
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     CONF_TURN_OFF_TIMEOUT,
-    CONF_TURN_ON_SELECT_ENTITY,
-    CONF_TURN_ON_SELECT_OPTION,
-    CONF_TURN_ON_SELECT_SOURCE_ENTITY,
+    CONF_TURN_ON_SELECTION_ENTITY,
+    CONF_TURN_ON_SELECTION_OPTION,
+    CONF_TURN_ON_SELECTION_SOURCE_ENTITY,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_COLOR_TEMP,
     CONF_WARN_DURATION,
@@ -152,9 +154,9 @@ from .const import (
     SCHEDULE_END_ACTION_TURN_OFF,
     SCHEDULE_END_ACTIONS,
     SCHEDULE_MODE_FOLLOW,
-    SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
     SCHEDULE_MODE_GATE_SWITCH,
+    SCHEDULE_MODE_GATE_TURN_OFF,
     SCHEDULE_MODES,
     SCHEDULE_OPERATORS,
     STANDBY_KEYS,
@@ -317,9 +319,9 @@ _LIGHT_SECTIONS: dict[str, tuple[str, ...]] = {
         CONF_AUTO_ON_COLOR_MODE,
         CONF_AUTO_ON_COLOR_TEMP,
         CONF_AUTO_ON_RGB_COLOR,
-        CONF_TURN_ON_SELECT_ENTITY,
-        CONF_TURN_ON_SELECT_OPTION,
-        CONF_TURN_ON_SELECT_SOURCE_ENTITY,
+        CONF_TURN_ON_SELECTION_ENTITY,
+        CONF_TURN_ON_SELECTION_OPTION,
+        CONF_TURN_ON_SELECTION_SOURCE_ENTITY,
         CONF_AUTO_ON_TRANSITION,
         CONF_AUTO_OFF_TRANSITION,
     ),
@@ -1055,22 +1057,22 @@ def _validate_turn_on_selection(
     hass: HomeAssistant, user_input: dict[str, Any]
 ) -> dict[str, str]:
     """Validate and normalize a virtual light's optional turn-on selection."""
-    select_entity = user_input.get(CONF_TURN_ON_SELECT_ENTITY)
-    option = str(user_input.get(CONF_TURN_ON_SELECT_OPTION) or "")
-    source_entity = user_input.get(CONF_TURN_ON_SELECT_SOURCE_ENTITY)
+    select_entity = user_input.get(CONF_TURN_ON_SELECTION_ENTITY)
+    option = str(user_input.get(CONF_TURN_ON_SELECTION_OPTION) or "")
+    source_entity = user_input.get(CONF_TURN_ON_SELECTION_SOURCE_ENTITY)
 
     if not option.strip():
         option = ""
     if not select_entity and not option and not source_entity:
-        user_input.pop(CONF_TURN_ON_SELECT_ENTITY, None)
-        user_input.pop(CONF_TURN_ON_SELECT_OPTION, None)
-        user_input.pop(CONF_TURN_ON_SELECT_SOURCE_ENTITY, None)
+        user_input.pop(CONF_TURN_ON_SELECTION_ENTITY, None)
+        user_input.pop(CONF_TURN_ON_SELECTION_OPTION, None)
+        user_input.pop(CONF_TURN_ON_SELECTION_SOURCE_ENTITY, None)
         return {}
     if not select_entity or not option:
         return {"base": "turn_on_selection_incomplete"}
     if source_entity == select_entity:
         return {
-            CONF_TURN_ON_SELECT_SOURCE_ENTITY: (
+            CONF_TURN_ON_SELECTION_SOURCE_ENTITY: (
                 "turn_on_selection_source_same_as_entity"
             )
         }
@@ -1085,7 +1087,7 @@ def _validate_turn_on_selection(
     ):
         return {"base": "turn_on_selection_invalid_option"}
     # Unverifiable options are stored as typed; each turn-on matches them.
-    user_input[CONF_TURN_ON_SELECT_OPTION] = option
+    user_input[CONF_TURN_ON_SELECTION_OPTION] = option
 
     if source_entity:
         source_state = hass.states.get(source_entity)
@@ -1103,7 +1105,7 @@ def _validate_turn_on_selection(
             )
         ):
             return {
-                CONF_TURN_ON_SELECT_SOURCE_ENTITY: (
+                CONF_TURN_ON_SELECTION_SOURCE_ENTITY: (
                     "turn_on_selection_source_no_matching_options"
                 )
             }
@@ -1143,11 +1145,11 @@ def _validate_occupancy_source(
     own names the edited sensor's entities, which a group in the source can
     contain.
     """
-    source = user_input.get(CONF_OCCUPANCY_SENSOR)
+    source = user_input.get(CONF_OCCUPANCY_SOURCE)
     if source in _molight_occupancy_sensor_ids(hass):
-        return {CONF_OCCUPANCY_SENSOR: "occupancy_source_molight"}
+        return {CONF_OCCUPANCY_SOURCE: "occupancy_source_molight"}
     if source and own and _sensors_depend_on(hass, [source], own):
-        return {CONF_OCCUPANCY_SENSOR: "occupancy_source_cycle"}
+        return {CONF_OCCUPANCY_SOURCE: "occupancy_source_cycle"}
     return {}
 
 
@@ -1377,11 +1379,11 @@ def _carry_turn_on_selection(
     values: dict[str, Any], previous: dict[str, Any] | None
 ) -> None:
     """Keep hidden selection-step values while its select entity stays unchanged."""
-    if not previous or values.get(CONF_TURN_ON_SELECT_ENTITY) != previous.get(
-        CONF_TURN_ON_SELECT_ENTITY
+    if not previous or values.get(CONF_TURN_ON_SELECTION_ENTITY) != previous.get(
+        CONF_TURN_ON_SELECTION_ENTITY
     ):
         return
-    for key in (CONF_TURN_ON_SELECT_OPTION, CONF_TURN_ON_SELECT_SOURCE_ENTITY):
+    for key in (CONF_TURN_ON_SELECTION_OPTION, CONF_TURN_ON_SELECTION_SOURCE_ENTITY):
         if key in previous:
             values[key] = previous[key]
 
@@ -1587,7 +1589,9 @@ def _light_setting_fields(
                     vol.Optional(CONF_AUTO_ON_COLOR_MODE): _COLOR_MODE_SELECTOR,
                     vol.Optional(CONF_AUTO_ON_COLOR_TEMP): _COLOR_TEMP_SELECTOR,
                     vol.Optional(CONF_AUTO_ON_RGB_COLOR): _RGB_COLOR_SELECTOR,
-                    vol.Optional(CONF_TURN_ON_SELECT_ENTITY): selector.EntitySelector(
+                    vol.Optional(
+                        CONF_TURN_ON_SELECTION_ENTITY
+                    ): selector.EntitySelector(
                         selector.EntitySelectorConfig(domain="select", multiple=False)
                     ),
                     vol.Optional(CONF_AUTO_ON_TRANSITION): _TRANSITION_SELECTOR,
@@ -1642,14 +1646,14 @@ def _light_setting_fields(
 def _turn_on_selection_fields(select_entity: str) -> dict:
     """Fields shown after a virtual light's turn-on selection entity is known."""
     return {
-        vol.Optional(CONF_TURN_ON_SELECT_SOURCE_ENTITY): selector.EntitySelector(
+        vol.Optional(CONF_TURN_ON_SELECTION_SOURCE_ENTITY): selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain=["input_select", "select"],
                 exclude_entities=[select_entity],
                 multiple=False,
             )
         ),
-        vol.Required(CONF_TURN_ON_SELECT_OPTION): selector.StateSelector(
+        vol.Required(CONF_TURN_ON_SELECTION_OPTION): selector.StateSelector(
             selector.StateSelectorConfig(
                 entity_id=select_entity,
                 hide_states=[STATE_UNAVAILABLE, STATE_UNKNOWN],
@@ -1833,7 +1837,7 @@ def _occupancy_entry_settings(entity_id: str, name: str) -> dict[str, Any]:
     return {
         CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
         CONF_NAME: name,
-        CONF_OCCUPANCY_SENSOR: entity_id,
+        CONF_OCCUPANCY_SOURCE: entity_id,
         CONF_OCCUPANCY_TIMEOUT: DEFAULT_OCCUPANCY_TIMEOUT,
         CONF_FALSE_DETECTION_GRACE: DEFAULT_FALSE_DETECTION_GRACE,
         CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT: DEFAULT_CLEAR_AFTER_UNAVAILABLE_TIMEOUT,
@@ -1844,7 +1848,7 @@ def _illuminance_entry_settings(entity_id: str, name: str) -> dict[str, Any]:
     return {
         CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
         CONF_NAME: name,
-        CONF_ILLUMINANCE_SENSOR: entity_id,
+        CONF_ILLUMINANCE_SOURCE: entity_id,
         CONF_ILLUMINANCE_THRESHOLD: DEFAULT_ILLUMINANCE_THRESHOLD,
         CONF_ILLUMINANCE_HYSTERESIS: DEFAULT_ILLUMINANCE_HYSTERESIS,
     }
@@ -2083,7 +2087,7 @@ def _conversion_eligible(cfg: dict[str, Any], *, to_scheduled: bool) -> bool:
         return cfg.get(CONF_ENTITY_TYPE) == ENTITY_TYPE_LIGHT and cfg.get(
             CONF_SCHEDULE_MODE, DEFAULT_SCHEDULE_MODE
         ) in (
-            SCHEDULE_MODE_GATE,
+            SCHEDULE_MODE_GATE_TURN_OFF,
             SCHEDULE_MODE_GATE_SWITCH,
             SCHEDULE_MODE_GATE_KEEP,
         )
@@ -2190,7 +2194,7 @@ class _ScheduledLightSettingsSteps:
             )
             if not errors:
                 _carry_turn_on_selection(flat, previous)
-                if flat.get(CONF_TURN_ON_SELECT_ENTITY):
+                if flat.get(CONF_TURN_ON_SELECTION_ENTITY):
                     self._scheduled_light_settings[settings_set] = (
                         _clean_optional_values(flat)
                     )
@@ -2265,7 +2269,7 @@ class _ScheduledLightSettingsSteps:
         if user_input is not None:
             # This step owns both selection fields; an absent option source
             # entity means the user cleared it, so it must not survive the update.
-            flat.pop(CONF_TURN_ON_SELECT_SOURCE_ENTITY, None)
+            flat.pop(CONF_TURN_ON_SELECTION_SOURCE_ENTITY, None)
             flat.update(user_input)
             flat = _current_entity_ids(self.hass, flat)
             errors = _validate_turn_on_selection(self.hass, flat)
@@ -2275,12 +2279,12 @@ class _ScheduledLightSettingsSteps:
                 )
                 return await self._scheduled_light_next(settings_set)
 
-        select_entity = flat[CONF_TURN_ON_SELECT_ENTITY]
+        select_entity = flat[CONF_TURN_ON_SELECTION_ENTITY]
         suggested = {
             key: flat[key]
             for key in (
-                CONF_TURN_ON_SELECT_OPTION,
-                CONF_TURN_ON_SELECT_SOURCE_ENTITY,
+                CONF_TURN_ON_SELECTION_OPTION,
+                CONF_TURN_ON_SELECTION_SOURCE_ENTITY,
             )
             if key in flat
         }
@@ -2923,7 +2927,7 @@ class MoLightConfigFlow(
             domain="binary_sensor",
             # Occupancy sensors are commonly exposed under any of these classes.
             device_classes={"occupancy", "motion", "presence"},
-            used_key=CONF_OCCUPANCY_SENSOR,
+            used_key=CONF_OCCUPANCY_SOURCE,
             select_step=self.async_step_discover_occupancy_select,
             user_input=user_input,
         )
@@ -2960,7 +2964,7 @@ class MoLightConfigFlow(
             step_id="discover_illuminance",
             domain="sensor",
             device_classes={"illuminance"},
-            used_key=CONF_ILLUMINANCE_SENSOR,
+            used_key=CONF_ILLUMINANCE_SOURCE,
             select_step=self.async_step_discover_illuminance_select,
             user_input=user_input,
         )
@@ -3063,7 +3067,7 @@ class MoLightConfigFlow(
             ):
                 errors["base"] = "schedule_sensor_not_schedule"
             if not errors:
-                if flat.get(CONF_TURN_ON_SELECT_ENTITY):
+                if flat.get(CONF_TURN_ON_SELECTION_ENTITY):
                     self._light_pending = {"kind": "discovery", "flat": flat}
                     return await self.async_step_light_selection()
                 _validate_turn_on_selection(self.hass, flat)
@@ -3221,7 +3225,7 @@ class MoLightConfigFlow(
             CONF_LIGHTS: cfg.get(CONF_LIGHTS, []),
             CONF_SCHEDULE_SENSOR: cfg[CONF_SCHEDULE_SENSOR],
             CONF_SCHEDULE_END_ACTION: {
-                SCHEDULE_MODE_GATE: SCHEDULE_END_ACTION_TURN_OFF,
+                SCHEDULE_MODE_GATE_TURN_OFF: SCHEDULE_END_ACTION_TURN_OFF,
                 SCHEDULE_MODE_GATE_SWITCH: SCHEDULE_END_ACTION_SWITCH,
                 SCHEDULE_MODE_GATE_KEEP: SCHEDULE_END_ACTION_KEEP,
             }[cfg.get(CONF_SCHEDULE_MODE, DEFAULT_SCHEDULE_MODE)],
@@ -3247,7 +3251,7 @@ class MoLightConfigFlow(
             CONF_LIGHTS: cfg.get(CONF_LIGHTS, []),
             CONF_SCHEDULE_SENSOR: cfg[CONF_SCHEDULE_SENSOR],
             CONF_SCHEDULE_MODE: {
-                SCHEDULE_END_ACTION_TURN_OFF: SCHEDULE_MODE_GATE,
+                SCHEDULE_END_ACTION_TURN_OFF: SCHEDULE_MODE_GATE_TURN_OFF,
                 SCHEDULE_END_ACTION_SWITCH: SCHEDULE_MODE_GATE_SWITCH,
                 SCHEDULE_END_ACTION_KEEP: SCHEDULE_MODE_GATE_KEEP,
             }[cfg.get(CONF_SCHEDULE_END_ACTION, DEFAULT_SCHEDULE_END_ACTION)],
@@ -3600,9 +3604,9 @@ class MoLightConfigFlow(
             errors = _validate_occupancy_source(self.hass, flat)
             errors.update(_validate_name(flat))
             if not errors and self._new_sensor_in_inputs(
-                flat[CONF_NAME], flat, [flat[CONF_OCCUPANCY_SENSOR]]
+                flat[CONF_NAME], flat, [flat[CONF_OCCUPANCY_SOURCE]]
             ):
-                errors[CONF_OCCUPANCY_SENSOR] = "occupancy_source_cycle"
+                errors[CONF_OCCUPANCY_SOURCE] = "occupancy_source_cycle"
             if not errors:
                 result, errors = await self._resolve_and_create(
                     entity_type=ENTITY_TYPE_OCCUPANCY,
@@ -3618,7 +3622,7 @@ class MoLightConfigFlow(
         schema = vol.Schema(
             {
                 vol.Required(CONF_NAME): str,
-                vol.Required(CONF_OCCUPANCY_SENSOR): selector.EntitySelector(
+                vol.Required(CONF_OCCUPANCY_SOURCE): selector.EntitySelector(
                     selector.EntitySelectorConfig(
                         domain="binary_sensor",
                         device_class=["occupancy", "motion", "presence"],
@@ -3732,7 +3736,7 @@ class MoLightConfigFlow(
         schema = vol.Schema(
             {
                 vol.Required(CONF_NAME): str,
-                vol.Required(CONF_ILLUMINANCE_SENSOR): selector.EntitySelector(
+                vol.Required(CONF_ILLUMINANCE_SOURCE): selector.EntitySelector(
                     selector.EntitySelectorConfig(
                         device_class="illuminance", multiple=False
                     )
@@ -4015,7 +4019,7 @@ class MoLightConfigFlow(
             if not errors:
                 errors.update(self._new_light_errors(flat))
             if not errors:
-                if flat.get(CONF_TURN_ON_SELECT_ENTITY):
+                if flat.get(CONF_TURN_ON_SELECTION_ENTITY):
                     self._light_pending = {
                         "kind": "create",
                         "flat": flat,
@@ -4091,9 +4095,9 @@ class MoLightConfigFlow(
                 self._light_selection_values = {
                     key: flat[key]
                     for key in (
-                        CONF_TURN_ON_SELECT_ENTITY,
-                        CONF_TURN_ON_SELECT_OPTION,
-                        CONF_TURN_ON_SELECT_SOURCE_ENTITY,
+                        CONF_TURN_ON_SELECTION_ENTITY,
+                        CONF_TURN_ON_SELECTION_OPTION,
+                        CONF_TURN_ON_SELECTION_SOURCE_ENTITY,
                     )
                     if key in flat
                 }
@@ -4112,8 +4116,8 @@ class MoLightConfigFlow(
                 # been taken since; only that form can change them.
                 return self._show_light_form(pending["prefill"], errors)
 
-        select_entity = flat[CONF_TURN_ON_SELECT_ENTITY]
-        suggested = {CONF_TURN_ON_SELECT_ENTITY: select_entity}
+        select_entity = flat[CONF_TURN_ON_SELECTION_ENTITY]
+        suggested = {CONF_TURN_ON_SELECTION_ENTITY: select_entity}
         _carry_turn_on_selection(suggested, self._light_selection_values)
         schema = vol.Schema(_turn_on_selection_fields(select_entity))
         return self.async_show_form(
@@ -4295,9 +4299,9 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         self._light_selection_values = {
             key: self._cfg[key]
             for key in (
-                CONF_TURN_ON_SELECT_ENTITY,
-                CONF_TURN_ON_SELECT_OPTION,
-                CONF_TURN_ON_SELECT_SOURCE_ENTITY,
+                CONF_TURN_ON_SELECTION_ENTITY,
+                CONF_TURN_ON_SELECTION_OPTION,
+                CONF_TURN_ON_SELECTION_SOURCE_ENTITY,
             )
             if key in self._cfg
         }
@@ -4430,7 +4434,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             {
                 vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
                 vol.Required(
-                    CONF_OCCUPANCY_SENSOR, default=cfg.get(CONF_OCCUPANCY_SENSOR)
+                    CONF_OCCUPANCY_SOURCE, default=cfg.get(CONF_OCCUPANCY_SOURCE)
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(
                         domain="binary_sensor",
@@ -4545,8 +4549,8 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             {
                 vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
                 vol.Required(
-                    CONF_ILLUMINANCE_SENSOR,
-                    default=cfg.get(CONF_ILLUMINANCE_SENSOR),
+                    CONF_ILLUMINANCE_SOURCE,
+                    default=cfg.get(CONF_ILLUMINANCE_SOURCE),
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(
                         device_class="illuminance", multiple=False
@@ -4785,7 +4789,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             ):
                 errors["base"] = "schedule_sensor_not_schedule"
             if not errors:
-                if flat.get(CONF_TURN_ON_SELECT_ENTITY):
+                if flat.get(CONF_TURN_ON_SELECTION_ENTITY):
                     self._light_pending = {"flat": flat}
                     return await self.async_step_light_selection()
                 _validate_turn_on_selection(self.hass, flat)
@@ -4867,8 +4871,8 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             if not errors:
                 return self._finish(_clean_optional_values(flat))
 
-        select_entity = flat[CONF_TURN_ON_SELECT_ENTITY]
-        suggested = {CONF_TURN_ON_SELECT_ENTITY: select_entity}
+        select_entity = flat[CONF_TURN_ON_SELECTION_ENTITY]
+        suggested = {CONF_TURN_ON_SELECTION_ENTITY: select_entity}
         _carry_turn_on_selection(suggested, self._light_selection_values)
         schema = vol.Schema(_turn_on_selection_fields(select_entity))
         return self.async_show_form(

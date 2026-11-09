@@ -702,7 +702,7 @@ def create_virtual_occupancy(
         "occupancy",
         {
             "name": name,
-            "occupancy_sensor": source,
+            "occupancy_source": source,
             "occupancy_timeout": timeout,
             "advanced": {
                 "false_detection_grace": 0,
@@ -725,7 +725,7 @@ def create_virtual_illuminance(
         "illuminance",
         {
             "name": name,
-            "illuminance_sensor": RAW_ILLUMINANCE,
+            "illuminance_source": RAW_ILLUMINANCE,
             "illuminance_threshold": 10,
             "illuminance_hysteresis": 1,
             "advanced": {"entity_id": entity_id},
@@ -803,7 +803,7 @@ def light_settings(brightness: int, *, inside: bool) -> dict[str, Any]:
         "behavior": {
             "auto_on_brightness": brightness,
             "auto_on_transition": 1,
-            "turn_on_select_entity": TURN_ON_SELECT,
+            "turn_on_selection_entity": TURN_ON_SELECT,
         },
     }
 
@@ -821,8 +821,8 @@ def flat_light_settings(payload: dict[str, Any]) -> dict[str, Any]:
 
 SCHEDULED_INSIDE_SETTINGS = {
     **flat_light_settings(light_settings(80, inside=True)),
-    "turn_on_select_option": "Cozy",
-    "turn_on_select_source_entity": SOURCE_SELECT,
+    "turn_on_selection_option": "Cozy",
+    "turn_on_selection_source_entity": SOURCE_SELECT,
 }
 
 
@@ -834,8 +834,8 @@ def submit_selection(
     return client.continue_flow(
         result,
         {
-            "turn_on_select_option": "Cozy",
-            "turn_on_select_source_entity": SOURCE_SELECT,
+            "turn_on_selection_option": "Cozy",
+            "turn_on_selection_source_entity": SOURCE_SELECT,
         },
     )
 
@@ -1026,8 +1026,8 @@ def edit_scheduled_light(client: HomeAssistantClient, entry_id: str) -> None:
     result = client.continue_flow(
         result,
         {
-            "turn_on_select_option": "Cozy",
-            "turn_on_select_source_entity": SOURCE_SELECT,
+            "turn_on_selection_option": "Cozy",
+            "turn_on_selection_source_entity": SOURCE_SELECT,
         },
         options=True,
     )
@@ -1037,8 +1037,8 @@ def edit_scheduled_light(client: HomeAssistantClient, entry_id: str) -> None:
     result = client.continue_flow(
         result,
         {
-            "turn_on_select_option": "Cozy",
-            "turn_on_select_source_entity": SOURCE_SELECT,
+            "turn_on_selection_option": "Cozy",
+            "turn_on_selection_source_entity": SOURCE_SELECT,
         },
         options=True,
     )
@@ -1209,7 +1209,7 @@ def run_config_flow_rejections(client: HomeAssistantClient) -> None:
         "illuminance",
         {
             "name": "E2E Rejected Illuminance",
-            "illuminance_sensor": RAW_ILLUMINANCE,
+            "illuminance_source": RAW_ILLUMINANCE,
             "illuminance_threshold": 10,
             "illuminance_hysteresis": 10,
             "advanced": {},
@@ -1258,7 +1258,7 @@ def run_config_flow_rejections(client: HomeAssistantClient) -> None:
             "lights": [RAW_TIMER_LIGHT],
             "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
-            "sensors": {"schedule_sensor": RAW_DOOR, "schedule_mode": "gate"},
+            "sensors": {"schedule_sensor": RAW_DOOR, "schedule_mode": "gate_turn_off"},
             "advanced": {},
         },
     )
@@ -2551,7 +2551,7 @@ def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> N
     # The restarted timer cannot finish before this, so an off by then came
     # from the window end.
     restarted_timer = restarted + 11
-    if schedule_mode == "gate":
+    if schedule_mode == "gate_turn_off":
         client.wait_state(
             RAW_MULTI_RGB,
             lambda state: state["state"] == "off",
@@ -2601,7 +2601,7 @@ def run_schedule_mode_scenarios(client: HomeAssistantClient) -> None:
     assert_entry_loaded(client, schedule_entry_id)
     set_end_schedule(client, False)
     run_follow_mode_scenario(client)
-    for schedule_mode in ("gate", "gate_keep", "gate_switch"):
+    for schedule_mode in ("gate_turn_off", "gate_keep", "gate_switch"):
         run_gate_mode_scenario(client, schedule_mode)
     client.remove_entry(schedule_entry_id)
     wait_entity_absent(client, END_SCHEDULE)
@@ -4475,7 +4475,7 @@ def run_false_detection_prepare() -> None:
         "occupancy",
         {
             "name": "E2E Grace Occupancy",
-            "occupancy_sensor": RAW_REMOVAL_MOTION,
+            "occupancy_source": RAW_REMOVAL_MOTION,
             "occupancy_timeout": 2,
             "advanced": {
                 "false_detection_grace": 1,
@@ -4642,7 +4642,7 @@ def run_late_source_prepare() -> None:
         "occupancy",
         {
             "name": "E2E Late Occupancy",
-            "occupancy_sensor": RAW_REMOVAL_MOTION,
+            "occupancy_source": RAW_REMOVAL_MOTION,
             "occupancy_timeout": 2,
             "advanced": {
                 "false_detection_grace": 1,
@@ -5087,7 +5087,7 @@ def run_dark_arrival_scenarios(client: HomeAssistantClient) -> None:
         "illuminance",
         {
             "name": "E2E Dusk Illuminance",
-            "illuminance_sensor": RAW_ILLUMINANCE,
+            "illuminance_source": RAW_ILLUMINANCE,
             "illuminance_threshold": 10,
             "illuminance_hysteresis": 0,
             "advanced": {"entity_id": "e2e_dusk_illuminance"},
@@ -5654,7 +5654,7 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
         "illuminance",
         {
             "name": "E2E End Illuminance",
-            "illuminance_sensor": RAW_ILLUMINANCE,
+            "illuminance_source": RAW_ILLUMINANCE,
             "illuminance_threshold": 10,
             "illuminance_hysteresis": 0,
             "advanced": {"entity_id": "e2e_end_illuminance"},
@@ -6087,7 +6087,7 @@ def run_entity_id_taken_scenario(client: HomeAssistantClient) -> None:
     """A taken entity ID is rejected, and the form returns prefilled for a new one."""
     payload = {
         "name": "E2E Rename",
-        "occupancy_sensor": RAW_MOTION,
+        "occupancy_source": RAW_MOTION,
         "occupancy_timeout": 1,
         "advanced": {"false_detection_grace": 0, "clear_after_unavailable_timeout": 1},
     }
@@ -6099,7 +6099,7 @@ def run_entity_id_taken_scenario(client: HomeAssistantClient) -> None:
     expect_step(result, "confirm_entity_id")
     result = client.continue_flow(result, {"next_step_id": "entity_id_change"})
     expect_step(result, "occupancy")
-    for field in ("name", "occupancy_sensor"):
+    for field in ("name", "occupancy_source"):
         if form_suggested(result, field) != payload[field]:
             raise AssertionError(f"The returned form lost its {field}: {result}")
     result = client.continue_flow(
@@ -6210,7 +6210,7 @@ def run_entity_id_change_scenarios(client: HomeAssistantClient) -> None:
     )
     wait_stored_entry(
         occupancy_id,
-        lambda cfg: cfg.get("occupancy_sensor") == ENTITY_ID_CHANGE_MOTION,
+        lambda cfg: cfg.get("occupancy_source") == ENTITY_ID_CHANGE_MOTION,
         "rewritten to the motion source's new entity ID",
     )
     wait_machine_state(client, "idle", ENTITY_ID_CHANGE_LIGHT)
@@ -6317,7 +6317,7 @@ def run_illuminance_source_scenario(client: HomeAssistantClient) -> None:
             result,
             {
                 "name": "E2E Src Illuminance",
-                "illuminance_sensor": source,
+                "illuminance_source": source,
                 "illuminance_threshold": 10,
                 "illuminance_hysteresis": 1,
             },
@@ -6844,7 +6844,7 @@ def run_hold_release_scenarios(client: HomeAssistantClient) -> None:
         "illuminance",
         {
             "name": "E2E Hold Illuminance",
-            "illuminance_sensor": RAW_ILLUMINANCE,
+            "illuminance_source": RAW_ILLUMINANCE,
             "illuminance_threshold": 10,
             "illuminance_hysteresis": 0,
             "advanced": {"entity_id": "e2e_hold_illuminance"},
@@ -6864,7 +6864,7 @@ def run_hold_release_scenarios(client: HomeAssistantClient) -> None:
                 "illuminance_sensor": HOLD_ILLUMINANCE,
                 "illuminance_mode": "control",
                 "schedule_sensor": END_SCHEDULE,
-                "schedule_mode": "gate",
+                "schedule_mode": "gate_turn_off",
                 "keep_on_entities": [RAW_DOOR],
             },
             "behavior": {"auto_on_brightness": 60},
@@ -7081,7 +7081,7 @@ def create_grace_occupancy(
         "occupancy",
         {
             "name": name,
-            "occupancy_sensor": source,
+            "occupancy_source": source,
             "occupancy_timeout": 2,
             "advanced": {
                 "false_detection_grace": 1,
@@ -7308,7 +7308,7 @@ def create_door_gate_light(client: HomeAssistantClient, door_mode: str) -> str:
                 "door_sensor": RAW_DOOR,
                 "door_mode": door_mode,
                 "schedule_sensor": END_SCHEDULE,
-                "schedule_mode": "gate",
+                "schedule_mode": "gate_turn_off",
             },
             "behavior": {"auto_on_brightness": 60},
             "advanced": {"entity_id": "e2e_door_gate"},
@@ -7499,7 +7499,7 @@ def run_reference_cleanup_scenarios(client: HomeAssistantClient) -> None:
         "illuminance",
         {
             "name": "E2E Ref Illuminance",
-            "illuminance_sensor": RAW_ILLUMINANCE,
+            "illuminance_source": RAW_ILLUMINANCE,
             "illuminance_threshold": 10,
             "illuminance_hysteresis": 0,
             "advanced": {"entity_id": "e2e_ref_illuminance"},
@@ -7518,7 +7518,7 @@ def run_reference_cleanup_scenarios(client: HomeAssistantClient) -> None:
                 "illuminance_sensor": REF_ILLUMINANCE,
                 "illuminance_mode": "control",
                 "schedule_sensor": REF_SCHEDULE,
-                "schedule_mode": "gate",
+                "schedule_mode": "gate_turn_off",
             },
             "advanced": {"entity_id": "e2e_ref_light"},
         },
@@ -7587,7 +7587,7 @@ def run_manual_control_scenarios(client: HomeAssistantClient) -> None:
         "illuminance",
         {
             "name": "E2E Manual Illuminance",
-            "illuminance_sensor": RAW_ILLUMINANCE,
+            "illuminance_source": RAW_ILLUMINANCE,
             "illuminance_threshold": 10,
             "illuminance_hysteresis": 0,
             "advanced": {"entity_id": "e2e_manual_illuminance"},
@@ -7607,7 +7607,7 @@ def run_manual_control_scenarios(client: HomeAssistantClient) -> None:
                 "illuminance_sensor": MANUAL_ILLUMINANCE,
                 "illuminance_mode": "gate_only",
                 "schedule_sensor": END_SCHEDULE,
-                "schedule_mode": "gate",
+                "schedule_mode": "gate_turn_off",
             },
             "behavior": {"auto_on_brightness": 60},
             "advanced": {"entity_id": "e2e_manual"},
@@ -7736,7 +7736,7 @@ def run_sensor_options_scenarios(client: HomeAssistantClient) -> None:
         result,
         {
             "name": "E2E Opt Occupancy Edited",
-            "occupancy_sensor": RAW_REMOVAL_MOTION,
+            "occupancy_source": RAW_REMOVAL_MOTION,
             "occupancy_timeout": 3,
             "advanced": {
                 "false_detection_grace": 0,
@@ -7775,7 +7775,7 @@ def run_sensor_options_scenarios(client: HomeAssistantClient) -> None:
         result,
         {
             "name": "E2E Opt Illuminance Edited",
-            "illuminance_sensor": RAW_ILLUMINANCE,
+            "illuminance_source": RAW_ILLUMINANCE,
             "illuminance_threshold": 20,
             "illuminance_hysteresis": 1,
         },
@@ -8294,7 +8294,7 @@ def run_combined_schedule_scenarios(client: HomeAssistantClient) -> None:
             "sensors": {
                 "occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY,
                 "schedule_sensor": COMBO_ANY,
-                "schedule_mode": "gate",
+                "schedule_mode": "gate_turn_off",
             },
             "advanced": {"entity_id": "e2e_combo_gate"},
         },
@@ -9287,13 +9287,13 @@ def create_park_light(client: HomeAssistantClient) -> str:
             "lights": [RAW_MULTI_DIMMER, RAW_MULTI_RGB],
             "turn_off_timeout": 12,
             **EMPTY_LIGHT_SECTIONS,
-            "behavior": {"turn_on_select_entity": TURN_ON_SELECT},
+            "behavior": {"turn_on_selection_entity": TURN_ON_SELECT},
             "warning": {"warn_duration": 20, "warn_brightness": 20},
             "advanced": {"entity_id": "e2e_park"},
         },
     )
     expect_step(result, "light_selection")
-    result = client.continue_flow(result, {"turn_on_select_option": "Night"})
+    result = client.continue_flow(result, {"turn_on_selection_option": "Night"})
     return finish_creation(result, "Park light")
 
 
@@ -9318,11 +9318,11 @@ def create_park_scheduled_light(client: HomeAssistantClient) -> str:
         {
             **EMPTY_LIGHT_SECTIONS,
             "turn_off_timeout": 30,
-            "behavior": {"turn_on_select_entity": TURN_ON_SELECT},
+            "behavior": {"turn_on_selection_entity": TURN_ON_SELECT},
         },
     )
     expect_step(result, "scheduled_light_selection")
-    result = client.continue_flow(result, {"turn_on_select_option": "Night"})
+    result = client.continue_flow(result, {"turn_on_selection_option": "Night"})
     expect_step(result, "scheduled_light_inside")
     result = client.continue_flow(
         result, {**EMPTY_INSIDE_LIGHT_SECTIONS, "turn_off_timeout": 30}

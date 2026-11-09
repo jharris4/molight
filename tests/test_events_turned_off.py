@@ -21,6 +21,7 @@ from custom_components.molight.const import (
     CONF_FALSE_DETECTION_GRACE,
     CONF_NAME,
     CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_STANDBY_BRIGHTNESS,
     CONF_TURN_OFF_TIMEOUT,
@@ -38,7 +39,7 @@ from custom_components.molight.const import (
     REASON_TIMER,
     REASON_VIRTUAL,
     SCHEDULE_MODE_FOLLOW,
-    SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_TURN_OFF,
 )
 from tests.conftest import (
     make_light_entry,
@@ -133,7 +134,7 @@ async def test_false_detection_off_delay(hass, freezer) -> None:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Motion",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.pir",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.pir",
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_FALSE_DETECTION_GRACE: 3,
         },
@@ -199,7 +200,10 @@ async def test_gate_window_end(hass) -> None:
     records = await _setup(
         hass,
         make_light_entry(
-            name="Hall", occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE
+            name="Hall",
+            occupancy=OCC,
+            schedule=SCHED,
+            schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
         ),
         binary_sensor__occ="off",
         binary_sensor__sched="on",

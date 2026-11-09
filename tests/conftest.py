@@ -38,6 +38,7 @@ from custom_components.molight.const import (
     CONF_FALSE_OFF_DELAY,
     CONF_ILLUMINANCE_MODE,
     CONF_ILLUMINANCE_SENSOR,
+    CONF_ILLUMINANCE_SOURCE,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_KEEP_ON_ENTITIES,
@@ -46,6 +47,7 @@ from custom_components.molight.const import (
     CONF_MATCH_SCHEDULE_AFTER_RESTART,
     CONF_NAME,
     CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_OCCUPANCY_TURN_ON,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
@@ -53,9 +55,9 @@ from custom_components.molight.const import (
     CONF_SCHEDULE_MODE,
     CONF_SCHEDULE_SENSOR,
     CONF_TURN_OFF_TIMEOUT,
-    CONF_TURN_ON_SELECT_ENTITY,
-    CONF_TURN_ON_SELECT_OPTION,
-    CONF_TURN_ON_SELECT_SOURCE_ENTITY,
+    CONF_TURN_ON_SELECTION_ENTITY,
+    CONF_TURN_ON_SELECTION_OPTION,
+    CONF_TURN_ON_SELECTION_SOURCE_ENTITY,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_COLOR_TEMP,
     CONF_WARN_DURATION,
@@ -174,9 +176,9 @@ def make_light_entry(
     auto_off_transition: float | None = None,
     effect_transition: float | None = None,
     warn_transition: float | None = None,
-    turn_on_select_entity: str | None = None,
-    turn_on_select_option: str | None = None,
-    turn_on_select_source_entity: str | None = None,
+    turn_on_selection_entity: str | None = None,
+    turn_on_selection_option: str | None = None,
+    turn_on_selection_source_entity: str | None = None,
 ) -> MockConfigEntry:
     """Build a virtual-light entry referencing arbitrary entity IDs.
 
@@ -244,12 +246,12 @@ def make_light_entry(
         data[CONF_EFFECT_TRANSITION] = effect_transition
     if warn_transition is not None:
         data[CONF_WARN_TRANSITION] = warn_transition
-    if turn_on_select_entity is not None:
-        data[CONF_TURN_ON_SELECT_ENTITY] = turn_on_select_entity
-    if turn_on_select_option is not None:
-        data[CONF_TURN_ON_SELECT_OPTION] = turn_on_select_option
-    if turn_on_select_source_entity is not None:
-        data[CONF_TURN_ON_SELECT_SOURCE_ENTITY] = turn_on_select_source_entity
+    if turn_on_selection_entity is not None:
+        data[CONF_TURN_ON_SELECTION_ENTITY] = turn_on_selection_entity
+    if turn_on_selection_option is not None:
+        data[CONF_TURN_ON_SELECTION_OPTION] = turn_on_selection_option
+    if turn_on_selection_source_entity is not None:
+        data[CONF_TURN_ON_SELECTION_SOURCE_ENTITY] = turn_on_selection_source_entity
     return virtual_light_behavior_entry(MockConfigEntry(domain=DOMAIN, data=data))
 
 
@@ -519,7 +521,7 @@ def occupancy_entry() -> MockConfigEntry:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Test Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
             # Classification off, like the runtime fallback that the
             # fixture's missing key used to hit; tests exercising false detections set
@@ -536,7 +538,7 @@ def illuminance_entry() -> MockConfigEntry:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
             CONF_NAME: "Test Illuminance",
-            CONF_ILLUMINANCE_SENSOR: "sensor.lux_1",
+            CONF_ILLUMINANCE_SOURCE: "sensor.lux_1",
             CONF_ILLUMINANCE_THRESHOLD: 10.0,
         },
     )

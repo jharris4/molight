@@ -29,9 +29,9 @@ from custom_components.molight.const import (
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE_ONLY,
     SCHEDULE_MODE_FOLLOW,
-    SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
     SCHEDULE_MODE_GATE_SWITCH,
+    SCHEDULE_MODE_GATE_TURN_OFF,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
     STATE_IDLE,
@@ -694,7 +694,7 @@ async def test_hold_blocks_gate_window_end_release_applies_it(
     await setup_entries(
         hass,
         make_light_entry(
-            occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE
+            occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF
         ),
     )
 
@@ -729,7 +729,9 @@ async def _hold_through_gate_end(hass: HomeAssistant, hold: str):
     hass.states.async_set(SCHED, "on")
     hass.states.async_set(KEEP_ON, "off")
     entry = make_light_entry(
-        schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE, keep_on_entities=[KEEP_ON]
+        schedule=SCHED,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
+        keep_on_entities=[KEEP_ON],
     )
     await setup_entries(hass, entry)
     await hass.services.async_call(
@@ -758,7 +760,8 @@ async def _assert_fresh_timer_on_release(hass: HomeAssistant, freezer, hold: str
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("hold", ["switch", "keep_on"])
 @pytest.mark.parametrize(
-    "mode", [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP]
+    "mode",
+    [SCHEDULE_MODE_GATE_TURN_OFF, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
 )
 async def test_release_outside_a_gate_window_runs_a_fresh_timer(
     hass: HomeAssistant, freezer, mode: str, hold: str

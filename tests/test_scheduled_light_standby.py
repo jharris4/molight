@@ -58,9 +58,9 @@ from custom_components.molight.const import (
     CONF_STANDBY_RGB_COLOR,
     CONF_TIME_WINDOWS,
     CONF_TURN_OFF_TIMEOUT,
-    CONF_TURN_ON_SELECT_ENTITY,
-    CONF_TURN_ON_SELECT_OPTION,
-    CONF_TURN_ON_SELECT_SOURCE_ENTITY,
+    CONF_TURN_ON_SELECTION_ENTITY,
+    CONF_TURN_ON_SELECTION_OPTION,
+    CONF_TURN_ON_SELECTION_SOURCE_ENTITY,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_COLOR_TEMP,
     CONF_WARN_DURATION,
@@ -207,8 +207,8 @@ async def test_schedule_start_turns_an_off_light_on_at_standby(
             inside={
                 CONF_AUTO_ON_TRANSITION: 2,
                 CONF_AUTO_OFF_TRANSITION: 3,
-                CONF_TURN_ON_SELECT_ENTITY: select,
-                CONF_TURN_ON_SELECT_OPTION: "Night",
+                CONF_TURN_ON_SELECTION_ENTITY: select,
+                CONF_TURN_ON_SELECTION_OPTION: "Night",
             }
         ),
         schedule="off",
@@ -1872,7 +1872,7 @@ async def test_recovered_member_is_selected_before_it_is_commanded(
     hass.bus.async_listen(EVENT_CALL_SERVICE, light_command)
     await _setup_porch(
         hass,
-        _porch(inside={**_SCENE, CONF_TURN_ON_SELECT_SOURCE_ENTITY: source}),
+        _porch(inside={**_SCENE, CONF_TURN_ON_SELECTION_SOURCE_ENTITY: source}),
     )
     assert order == [("select", "Night"), ("light", STANDBY)]
     hass.states.async_set(
@@ -2613,8 +2613,8 @@ class _ParkedSelect:
 
 
 _SCENE = {
-    CONF_TURN_ON_SELECT_ENTITY: "select.scene",
-    CONF_TURN_ON_SELECT_OPTION: "Night",
+    CONF_TURN_ON_SELECTION_ENTITY: "select.scene",
+    CONF_TURN_ON_SELECTION_OPTION: "Night",
 }
 
 

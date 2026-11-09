@@ -76,6 +76,7 @@ from custom_components.molight.const import (
     CONF_ILLUMINANCE_HYSTERESIS,
     CONF_ILLUMINANCE_MODE,
     CONF_ILLUMINANCE_SENSOR,
+    CONF_ILLUMINANCE_SOURCE,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_KEEP_ON_ENTITIES,
@@ -85,6 +86,7 @@ from custom_components.molight.const import (
     CONF_MATCH_SCHEDULE_AFTER_RESTART,
     CONF_NAME,
     CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_OCCUPANCY_TURN_ON,
     CONF_OFF_BUTTONS_SINGLE,
@@ -110,9 +112,9 @@ from custom_components.molight.const import (
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     CONF_TURN_OFF_TIMEOUT,
-    CONF_TURN_ON_SELECT_ENTITY,
-    CONF_TURN_ON_SELECT_OPTION,
-    CONF_TURN_ON_SELECT_SOURCE_ENTITY,
+    CONF_TURN_ON_SELECTION_ENTITY,
+    CONF_TURN_ON_SELECTION_OPTION,
+    CONF_TURN_ON_SELECTION_SOURCE_ENTITY,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_COLOR_TEMP,
     CONF_WARN_DURATION,
@@ -144,9 +146,9 @@ from custom_components.molight.const import (
     SCHEDULE_END_ACTION_SWITCH,
     SCHEDULE_END_ACTION_TURN_OFF,
     SCHEDULE_MODE_FOLLOW,
-    SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
     SCHEDULE_MODE_GATE_SWITCH,
+    SCHEDULE_MODE_GATE_TURN_OFF,
     SCHEDULE_OPERATOR_ALL,
     SCHEDULE_OPERATOR_ANY,
     STANDBY_KEYS,
@@ -300,7 +302,7 @@ async def test_config_flow_occupancy(hass: HomeAssistant) -> None:
         result["flow_id"],
         {
             CONF_NAME: "Hall Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.hall_motion",
             CONF_OCCUPANCY_TIMEOUT: 60,
             SECTION_ADVANCED: {},
         },
@@ -332,7 +334,7 @@ async def test_occupancy_source_picker_excludes_molight_occupancy_sensors(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY}
     )
 
-    assert set(_selector_config(result, CONF_OCCUPANCY_SENSOR)["exclude_entities"]) == {
+    assert set(_selector_config(result, CONF_OCCUPANCY_SOURCE)["exclude_entities"]) == {
         "binary_sensor.combined",
         "binary_sensor.test_occupancy",
     }
@@ -347,22 +349,22 @@ async def test_occupancy_create_rejects_molight_source_from_stale_form(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY}
     )
-    assert _selector_config(result, CONF_OCCUPANCY_SENSOR)["exclude_entities"] == []
+    assert _selector_config(result, CONF_OCCUPANCY_SOURCE)["exclude_entities"] == []
 
     await setup_entries(hass, occupancy_entry)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
             CONF_NAME: "Nested Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.test_occupancy",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.test_occupancy",
             CONF_OCCUPANCY_TIMEOUT: 60,
             SECTION_ADVANCED: {},
         },
     )
 
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {CONF_OCCUPANCY_SENSOR: "occupancy_source_molight"}
-    assert _suggested_values(result["data_schema"])[CONF_OCCUPANCY_SENSOR] == (
+    assert result["errors"] == {CONF_OCCUPANCY_SOURCE: "occupancy_source_molight"}
+    assert _suggested_values(result["data_schema"])[CONF_OCCUPANCY_SOURCE] == (
         "binary_sensor.test_occupancy"
     )
 
@@ -1002,7 +1004,7 @@ async def test_light_options_keep_existing_non_schedule_sensor(
             CONF_LIGHTS: ["light.hallway"],
             CONF_TURN_OFF_TIMEOUT: 60,
             CONF_SCHEDULE_SENSOR: "binary_sensor.test_occupancy",
-            CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
+            CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE_TURN_OFF,
         },
     )
     await setup_entries(hass, occupancy_entry, light)
@@ -1021,7 +1023,7 @@ async def test_light_options_keep_existing_non_schedule_sensor(
             CONF_TURN_OFF_TIMEOUT: 60,
             SECTION_SENSORS: {
                 CONF_SCHEDULE_SENSOR: "binary_sensor.test_occupancy",
-                CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
+                CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE_TURN_OFF,
             },
         },
     )
@@ -1068,7 +1070,7 @@ async def test_light_options_reject_different_non_schedule_sensor(
             CONF_LIGHTS: ["light.hallway"],
             CONF_TURN_OFF_TIMEOUT: 60,
             CONF_SCHEDULE_SENSOR: "binary_sensor.test_occupancy",
-            CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
+            CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE_TURN_OFF,
         },
     )
     scheduled = MockConfigEntry(
@@ -1098,7 +1100,7 @@ async def test_light_options_reject_different_non_schedule_sensor(
             CONF_TURN_OFF_TIMEOUT: 60,
             SECTION_SENSORS: {
                 CONF_SCHEDULE_SENSOR: "binary_sensor.test_illuminance",
-                CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
+                CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE_TURN_OFF,
             },
         },
     )
@@ -1206,12 +1208,12 @@ async def test_scheduled_light_turn_on_selection_for_each_settings_set(
         {
             **EMPTY_LIGHT_SECTIONS,
             CONF_TURN_OFF_TIMEOUT: 300,
-            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.mode"},
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.mode"},
         },
     )
     assert result["step_id"] == "scheduled_light_selection"
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Day"}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "Day"}
     )
     assert result["step_id"] == "scheduled_light_inside"
 
@@ -1220,21 +1222,21 @@ async def test_scheduled_light_turn_on_selection_for_each_settings_set(
         {
             **EMPTY_INSIDE_LIGHT_SECTIONS,
             CONF_TURN_OFF_TIMEOUT: 300,
-            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.mode"},
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.mode"},
         },
     )
     assert result["step_id"] == "scheduled_light_selection"
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Night"}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "Night"}
     )
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert (
-        result["data"][CONF_OUTSIDE_SCHEDULE_SETTINGS][CONF_TURN_ON_SELECT_OPTION]
+        result["data"][CONF_OUTSIDE_SCHEDULE_SETTINGS][CONF_TURN_ON_SELECTION_OPTION]
         == "Day"
     )
     assert (
-        result["data"][CONF_INSIDE_SCHEDULE_SETTINGS][CONF_TURN_ON_SELECT_OPTION]
+        result["data"][CONF_INSIDE_SCHEDULE_SETTINGS][CONF_TURN_ON_SELECTION_OPTION]
         == "Night"
     )
 
@@ -1421,7 +1423,7 @@ async def test_occupancy_edit_checks_both_settings_sets(
         result["flow_id"],
         {
             CONF_NAME: "Test Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 45,
             SECTION_ADVANCED: {},
         },
@@ -1432,7 +1434,7 @@ async def test_occupancy_edit_checks_both_settings_sets(
         result["flow_id"],
         {
             CONF_NAME: "Test Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 25,
             SECTION_ADVANCED: {},
         },
@@ -1527,41 +1529,41 @@ async def test_scheduled_light_inside_selection_prefills_from_outside(
     settings = {
         **EMPTY_LIGHT_SECTIONS,
         CONF_TURN_OFF_TIMEOUT: 300,
-        SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.mode"},
+        SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.mode"},
     }
     result = await hass.config_entries.flow.async_configure(result["flow_id"], settings)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
-            CONF_TURN_ON_SELECT_OPTION: "Day",
-            CONF_TURN_ON_SELECT_SOURCE_ENTITY: "input_select.theme",
+            CONF_TURN_ON_SELECTION_OPTION: "Day",
+            CONF_TURN_ON_SELECTION_SOURCE_ENTITY: "input_select.theme",
         },
     )
     assert result["step_id"] == "scheduled_light_inside"
     # The inside form is prefilled with the outside settings, select entity included.
     suggested = _suggested_values(result["data_schema"])
-    assert suggested[SECTION_BEHAVIOR][CONF_TURN_ON_SELECT_ENTITY] == "select.mode"
+    assert suggested[SECTION_BEHAVIOR][CONF_TURN_ON_SELECTION_ENTITY] == "select.mode"
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {**settings, SECTION_STANDBY: {}}
     )
     assert result["step_id"] == "scheduled_light_selection"
     suggested = _suggested_values(result["data_schema"])
-    assert suggested[CONF_TURN_ON_SELECT_OPTION] == "Day"
-    assert suggested[CONF_TURN_ON_SELECT_SOURCE_ENTITY] == "input_select.theme"
+    assert suggested[CONF_TURN_ON_SELECTION_OPTION] == "Day"
+    assert suggested[CONF_TURN_ON_SELECTION_SOURCE_ENTITY] == "input_select.theme"
 
     # Submitting the carried values unchanged stores them in the inside settings.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
-            CONF_TURN_ON_SELECT_OPTION: "Day",
-            CONF_TURN_ON_SELECT_SOURCE_ENTITY: "input_select.theme",
+            CONF_TURN_ON_SELECTION_OPTION: "Day",
+            CONF_TURN_ON_SELECTION_SOURCE_ENTITY: "input_select.theme",
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     inside = result["data"][CONF_INSIDE_SCHEDULE_SETTINGS]
-    assert inside[CONF_TURN_ON_SELECT_OPTION] == "Day"
-    assert inside[CONF_TURN_ON_SELECT_SOURCE_ENTITY] == "input_select.theme"
+    assert inside[CONF_TURN_ON_SELECTION_OPTION] == "Day"
+    assert inside[CONF_TURN_ON_SELECTION_SOURCE_ENTITY] == "input_select.theme"
 
 
 @pytest.mark.asyncio
@@ -1581,14 +1583,14 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
             CONF_SCHEDULE_SENSOR: "binary_sensor.night_schedule",
             CONF_OUTSIDE_SCHEDULE_SETTINGS: {
                 CONF_TURN_OFF_TIMEOUT: 300,
-                CONF_TURN_ON_SELECT_ENTITY: "select.mode",
-                CONF_TURN_ON_SELECT_OPTION: "Day",
-                CONF_TURN_ON_SELECT_SOURCE_ENTITY: "input_select.theme",
+                CONF_TURN_ON_SELECTION_ENTITY: "select.mode",
+                CONF_TURN_ON_SELECTION_OPTION: "Day",
+                CONF_TURN_ON_SELECTION_SOURCE_ENTITY: "input_select.theme",
             },
             CONF_INSIDE_SCHEDULE_SETTINGS: {
                 CONF_TURN_OFF_TIMEOUT: 60,
-                CONF_TURN_ON_SELECT_ENTITY: "select.mode",
-                CONF_TURN_ON_SELECT_OPTION: "Night",
+                CONF_TURN_ON_SELECTION_ENTITY: "select.mode",
+                CONF_TURN_ON_SELECTION_OPTION: "Night",
             },
         },
     )
@@ -1605,7 +1607,7 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
     )
     assert result["step_id"] == "scheduled_light_outside"
     suggested = _suggested_values(result["data_schema"])
-    assert suggested[SECTION_BEHAVIOR][CONF_TURN_ON_SELECT_ENTITY] == "select.mode"
+    assert suggested[SECTION_BEHAVIOR][CONF_TURN_ON_SELECTION_ENTITY] == "select.mode"
 
     # Outside: keep the select entity, so the selection step shows the entry settings.
     result = await hass.config_entries.options.async_configure(
@@ -1613,20 +1615,20 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
         {
             **EMPTY_LIGHT_SECTIONS,
             CONF_TURN_OFF_TIMEOUT: 300,
-            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.mode"},
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.mode"},
         },
     )
     assert result["step_id"] == "scheduled_light_selection"
-    assert _selector_config(result, CONF_TURN_ON_SELECT_OPTION)["entity_id"] == (
+    assert _selector_config(result, CONF_TURN_ON_SELECTION_OPTION)["entity_id"] == (
         "select.mode"
     )
     suggested = _suggested_values(result["data_schema"])
-    assert suggested[CONF_TURN_ON_SELECT_OPTION] == "Day"
-    assert suggested[CONF_TURN_ON_SELECT_SOURCE_ENTITY] == "input_select.theme"
+    assert suggested[CONF_TURN_ON_SELECTION_OPTION] == "Day"
+    assert suggested[CONF_TURN_ON_SELECTION_SOURCE_ENTITY] == "input_select.theme"
 
     # A bad option is rejected on this step, and the form stays on this settings set.
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Nope"}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "Nope"}
     )
     assert result["step_id"] == "scheduled_light_selection"
     assert result["errors"] == {"base": "turn_on_selection_invalid_option"}
@@ -1634,13 +1636,13 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
-            CONF_TURN_ON_SELECT_OPTION: "Dusk",
-            CONF_TURN_ON_SELECT_SOURCE_ENTITY: "input_select.theme",
+            CONF_TURN_ON_SELECTION_OPTION: "Dusk",
+            CONF_TURN_ON_SELECTION_SOURCE_ENTITY: "input_select.theme",
         },
     )
     assert result["step_id"] == "scheduled_light_inside"
     suggested = _suggested_values(result["data_schema"])
-    assert suggested[SECTION_BEHAVIOR][CONF_TURN_ON_SELECT_ENTITY] == "select.mode"
+    assert suggested[SECTION_BEHAVIOR][CONF_TURN_ON_SELECTION_ENTITY] == "select.mode"
 
     # Inside: clear the select entity; no selection step, and its values are dropped.
     result = await hass.config_entries.options.async_configure(
@@ -1651,14 +1653,14 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
 
     cfg = entry_settings(entry)
     outside = cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS]
-    assert outside[CONF_TURN_ON_SELECT_ENTITY] == "select.mode"
-    assert outside[CONF_TURN_ON_SELECT_OPTION] == "Dusk"
+    assert outside[CONF_TURN_ON_SELECTION_ENTITY] == "select.mode"
+    assert outside[CONF_TURN_ON_SELECTION_OPTION] == "Dusk"
     # The resubmitted option source entity survives the trip through the selection step.
-    assert outside[CONF_TURN_ON_SELECT_SOURCE_ENTITY] == "input_select.theme"
+    assert outside[CONF_TURN_ON_SELECTION_SOURCE_ENTITY] == "input_select.theme"
     inside = cfg[CONF_INSIDE_SCHEDULE_SETTINGS]
-    assert CONF_TURN_ON_SELECT_ENTITY not in inside
-    assert CONF_TURN_ON_SELECT_OPTION not in inside
-    assert CONF_TURN_ON_SELECT_SOURCE_ENTITY not in inside
+    assert CONF_TURN_ON_SELECTION_ENTITY not in inside
+    assert CONF_TURN_ON_SELECTION_OPTION not in inside
+    assert CONF_TURN_ON_SELECTION_SOURCE_ENTITY not in inside
 
     # A second pass that keeps the select entity but omits the option source
     # entity clears it: the selection step owns the field, so absence is a
@@ -1677,12 +1679,12 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
         {
             **EMPTY_LIGHT_SECTIONS,
             CONF_TURN_OFF_TIMEOUT: 300,
-            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.mode"},
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.mode"},
         },
     )
     assert result["step_id"] == "scheduled_light_selection"
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Dusk"}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "Dusk"}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {**EMPTY_INSIDE_LIGHT_SECTIONS, CONF_TURN_OFF_TIMEOUT: 60}
@@ -1691,8 +1693,8 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
     await hass.async_block_till_done()
 
     outside = entry_settings(entry)[CONF_OUTSIDE_SCHEDULE_SETTINGS]
-    assert outside[CONF_TURN_ON_SELECT_OPTION] == "Dusk"
-    assert CONF_TURN_ON_SELECT_SOURCE_ENTITY not in outside
+    assert outside[CONF_TURN_ON_SELECTION_OPTION] == "Dusk"
+    assert CONF_TURN_ON_SELECTION_SOURCE_ENTITY not in outside
 
 
 @pytest.mark.asyncio
@@ -1733,20 +1735,20 @@ async def test_scheduled_light_options_inside_selection_step(
         {
             **EMPTY_INSIDE_LIGHT_SECTIONS,
             CONF_TURN_OFF_TIMEOUT: 60,
-            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.mode"},
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.mode"},
         },
     )
     assert result["step_id"] == "scheduled_light_selection"
     assert result["description_placeholders"] == {"entity_id": "select.mode"}
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Night"}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "Night"}
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
     cfg = entry_settings(entry)
-    assert CONF_TURN_ON_SELECT_ENTITY not in cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS]
-    assert cfg[CONF_INSIDE_SCHEDULE_SETTINGS][CONF_TURN_ON_SELECT_OPTION] == "Night"
+    assert CONF_TURN_ON_SELECTION_ENTITY not in cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS]
+    assert cfg[CONF_INSIDE_SCHEDULE_SETTINGS][CONF_TURN_ON_SELECTION_OPTION] == "Night"
 
 
 @pytest.mark.asyncio
@@ -1890,27 +1892,27 @@ async def test_light_flow_stores_turn_on_selection(hass: HomeAssistant) -> None:
             CONF_NAME: "WLED",
             CONF_LIGHTS: ["light.wled_real"],
             CONF_TURN_OFF_TIMEOUT: 300,
-            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.wled_preset"},
         },
     )
     assert result["step_id"] == "light_selection"
     option_marker = next(
         marker
         for marker in result["data_schema"].schema
-        if str(marker) == CONF_TURN_ON_SELECT_OPTION
+        if str(marker) == CONF_TURN_ON_SELECTION_OPTION
     )
     assert isinstance(option_marker, vol.Required)
-    option_selector = _selector_config(result, CONF_TURN_ON_SELECT_OPTION)
+    option_selector = _selector_config(result, CONF_TURN_ON_SELECTION_OPTION)
     assert option_selector["entity_id"] == "select.wled_preset"
     assert option_selector["hide_states"] == ["unavailable", "unknown"]
 
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "  Christmas  "}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "  Christmas  "}
     )
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
-    assert result["data"][CONF_TURN_ON_SELECT_ENTITY] == "select.wled_preset"
-    assert result["data"][CONF_TURN_ON_SELECT_OPTION] == "Christmas"
+    assert result["data"][CONF_TURN_ON_SELECTION_ENTITY] == "select.wled_preset"
+    assert result["data"][CONF_TURN_ON_SELECTION_OPTION] == "Christmas"
 
 
 _PRESET = "select.wled_preset"
@@ -1921,7 +1923,7 @@ async def _reach_selection(hass: HomeAssistant, flow: str) -> tuple[dict, Any]:
 
     Returns that step's result and the flow manager to submit it with.
     """
-    behavior = {SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: _PRESET}}
+    behavior = {SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: _PRESET}}
     manager = hass.config_entries.flow
     if flow == "create":
         result = await _start_create(hass)
@@ -1986,7 +1988,7 @@ async def _stored_option(
             {**EMPTY_INSIDE_LIGHT_SECTIONS, CONF_TURN_OFF_TIMEOUT: 60},
         )
         return result["data"][CONF_OUTSIDE_SCHEDULE_SETTINGS][
-            CONF_TURN_ON_SELECT_OPTION
+            CONF_TURN_ON_SELECTION_OPTION
         ]
     if flow == "discovery":
         assert result["type"] == FlowResultType.ABORT
@@ -1996,9 +1998,9 @@ async def _stored_option(
             for e in hass.config_entries.async_entries(DOMAIN)
             if entry_settings(e).get(CONF_LIGHTS) == ["light.desk"]
         ]
-        return created.data[CONF_TURN_ON_SELECT_OPTION]
+        return created.data[CONF_TURN_ON_SELECTION_OPTION]
     assert result["type"] == FlowResultType.CREATE_ENTRY
-    return result["data"][CONF_TURN_ON_SELECT_OPTION]
+    return result["data"][CONF_TURN_ON_SELECTION_OPTION]
 
 
 @pytest.mark.asyncio
@@ -2043,7 +2045,7 @@ async def test_selection_keeps_an_options_own_padding(
     result, manager = await _reach_selection(hass, flow)
 
     result = await manager.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: submitted}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: submitted}
     )
 
     assert await _stored_option(hass, flow, result, manager) == stored
@@ -2059,7 +2061,7 @@ async def test_selection_rejects_typed_padding_that_names_two_options(
     result, manager = await _reach_selection(hass, flow)
 
     result = await manager.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "Cozy"}
     )
 
     assert result["type"] == FlowResultType.FORM
@@ -2078,8 +2080,8 @@ async def test_selection_source_matching_a_padded_option_is_accepted(
     result = await manager.async_configure(
         result["flow_id"],
         {
-            CONF_TURN_ON_SELECT_OPTION: "Night",
-            CONF_TURN_ON_SELECT_SOURCE_ENTITY: "input_select.theme",
+            CONF_TURN_ON_SELECTION_OPTION: "Night",
+            CONF_TURN_ON_SELECTION_SOURCE_ENTITY: "input_select.theme",
         },
     )
 
@@ -2101,7 +2103,7 @@ async def test_light_flow_late_entity_id_conflict_returns_to_light_form(
         CONF_NAME: "WLED",
         CONF_LIGHTS: ["light.wled_real"],
         CONF_TURN_OFF_TIMEOUT: 300,
-        SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
+        SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.wled_preset"},
         SECTION_ADVANCED: {CONF_ENTITY_ID: "racy"},
     }
     result = await _start_create(hass)
@@ -2114,7 +2116,7 @@ async def test_light_flow_late_entity_id_conflict_returns_to_light_form(
     assert result["step_id"] == "light_selection"
     hass.states.async_set("light.racy", "off")
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Christmas"}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "Christmas"}
     )
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "light"
@@ -2128,28 +2130,28 @@ async def test_light_flow_late_entity_id_conflict_returns_to_light_form(
         result["flow_id"], {**light_form, SECTION_ADVANCED: {CONF_ENTITY_ID: "free"}}
     )
     assert _suggested_values(result["data_schema"]) == {
-        CONF_TURN_ON_SELECT_OPTION: "Christmas"
+        CONF_TURN_ON_SELECTION_OPTION: "Christmas"
     }
     hass.states.async_set("light.free", "off")
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Christmas"}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "Christmas"}
     )
     assert result["step_id"] == "light"
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
             **light_form,
-            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.other"},
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.other"},
             SECTION_ADVANCED: {CONF_ENTITY_ID: "wled"},
         },
     )
     assert _suggested_values(result["data_schema"]) == {}
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "B"}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "B"}
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_ENTITY_ID] == "wled"
-    assert result["data"][CONF_TURN_ON_SELECT_OPTION] == "B"
+    assert result["data"][CONF_TURN_ON_SELECTION_OPTION] == "B"
 
 
 @pytest.mark.asyncio
@@ -2173,13 +2175,13 @@ async def test_light_flow_rejects_invalid_turn_on_fallback(
             CONF_NAME: "WLED",
             CONF_LIGHTS: ["light.wled"],
             CONF_TURN_OFF_TIMEOUT: 300,
-            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.wled_preset"},
         },
     )
     assert result["step_id"] == "light_selection"
 
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Missing"}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "Missing"}
     )
 
     assert result["type"] == FlowResultType.FORM
@@ -2210,26 +2212,26 @@ async def test_light_flow_stores_turn_on_selection_source(
             CONF_NAME: "WLED",
             CONF_LIGHTS: ["light.wled_real"],
             CONF_TURN_OFF_TIMEOUT: 300,
-            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.wled_preset"},
         },
     )
-    source_selector = _selector_config(result, CONF_TURN_ON_SELECT_SOURCE_ENTITY)
+    source_selector = _selector_config(result, CONF_TURN_ON_SELECTION_SOURCE_ENTITY)
     assert source_selector["domain"] == ["input_select", "select"]
     assert source_selector["exclude_entities"] == ["select.wled_preset"]
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
-            CONF_TURN_ON_SELECT_SOURCE_ENTITY: "input_select.outdoor_theme",
-            CONF_TURN_ON_SELECT_OPTION: "Warm White",
+            CONF_TURN_ON_SELECTION_SOURCE_ENTITY: "input_select.outdoor_theme",
+            CONF_TURN_ON_SELECTION_OPTION: "Warm White",
         },
     )
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
-    assert result["data"][CONF_TURN_ON_SELECT_SOURCE_ENTITY] == (
+    assert result["data"][CONF_TURN_ON_SELECTION_SOURCE_ENTITY] == (
         "input_select.outdoor_theme"
     )
-    assert result["data"][CONF_TURN_ON_SELECT_OPTION] == "Warm White"
+    assert result["data"][CONF_TURN_ON_SELECTION_OPTION] == "Warm White"
 
 
 @pytest.mark.asyncio
@@ -2244,14 +2246,16 @@ async def test_light_flow_rejects_select_entity_as_option_source(
     errors = _validate_turn_on_selection(
         hass,
         {
-            CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset",
-            CONF_TURN_ON_SELECT_SOURCE_ENTITY: "select.wled_preset",
-            CONF_TURN_ON_SELECT_OPTION: "Warm White",
+            CONF_TURN_ON_SELECTION_ENTITY: "select.wled_preset",
+            CONF_TURN_ON_SELECTION_SOURCE_ENTITY: "select.wled_preset",
+            CONF_TURN_ON_SELECTION_OPTION: "Warm White",
         },
     )
 
     assert errors == {
-        CONF_TURN_ON_SELECT_SOURCE_ENTITY: ("turn_on_selection_source_same_as_entity")
+        CONF_TURN_ON_SELECTION_SOURCE_ENTITY: (
+            "turn_on_selection_source_same_as_entity"
+        )
     }
 
 
@@ -2279,21 +2283,21 @@ async def test_light_flow_rejects_source_without_matching_options(
             CONF_NAME: "WLED",
             CONF_LIGHTS: ["light.wled"],
             CONF_TURN_OFF_TIMEOUT: 300,
-            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.wled_preset"},
         },
     )
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
-            CONF_TURN_ON_SELECT_SOURCE_ENTITY: "input_select.outdoor_theme",
-            CONF_TURN_ON_SELECT_OPTION: "Warm White",
+            CONF_TURN_ON_SELECTION_SOURCE_ENTITY: "input_select.outdoor_theme",
+            CONF_TURN_ON_SELECTION_OPTION: "Warm White",
         },
     )
 
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {
-        CONF_TURN_ON_SELECT_SOURCE_ENTITY: (
+        CONF_TURN_ON_SELECTION_SOURCE_ENTITY: (
             "turn_on_selection_source_no_matching_options"
         )
     }
@@ -2309,8 +2313,8 @@ async def test_light_options_can_clear_turn_on_selection(hass: HomeAssistant) ->
             CONF_NAME: "WLED",
             CONF_LIGHTS: ["light.wled_real"],
             CONF_TURN_OFF_TIMEOUT: 300,
-            CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset",
-            CONF_TURN_ON_SELECT_OPTION: "Christmas",
+            CONF_TURN_ON_SELECTION_ENTITY: "select.wled_preset",
+            CONF_TURN_ON_SELECTION_OPTION: "Christmas",
         },
     )
     light.add_to_hass(hass)
@@ -2331,9 +2335,9 @@ async def test_light_options_can_clear_turn_on_selection(hass: HomeAssistant) ->
     await hass.async_block_till_done()
 
     cfg = entry_settings(light)
-    assert CONF_TURN_ON_SELECT_ENTITY not in cfg
-    assert CONF_TURN_ON_SELECT_OPTION not in cfg
-    assert CONF_TURN_ON_SELECT_SOURCE_ENTITY not in cfg
+    assert CONF_TURN_ON_SELECTION_ENTITY not in cfg
+    assert CONF_TURN_ON_SELECTION_OPTION not in cfg
+    assert CONF_TURN_ON_SELECTION_SOURCE_ENTITY not in cfg
 
 
 @pytest.mark.asyncio
@@ -2354,9 +2358,9 @@ async def test_light_options_prefill_and_update_turn_on_selection(
             CONF_NAME: "WLED",
             CONF_LIGHTS: ["light.wled_real"],
             CONF_TURN_OFF_TIMEOUT: 300,
-            CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset",
-            CONF_TURN_ON_SELECT_OPTION: "Christmas",
-            CONF_TURN_ON_SELECT_SOURCE_ENTITY: "input_select.seasonal_theme",
+            CONF_TURN_ON_SELECTION_ENTITY: "select.wled_preset",
+            CONF_TURN_ON_SELECTION_OPTION: "Christmas",
+            CONF_TURN_ON_SELECTION_SOURCE_ENTITY: "input_select.seasonal_theme",
         },
     )
     light.add_to_hass(hass)
@@ -2371,33 +2375,33 @@ async def test_light_options_prefill_and_update_turn_on_selection(
             CONF_NAME: "WLED",
             CONF_LIGHTS: ["light.wled_real"],
             CONF_TURN_OFF_TIMEOUT: 300,
-            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.wled_preset"},
         },
     )
 
     assert result["step_id"] == "light_selection"
-    assert _selector_config(result, CONF_TURN_ON_SELECT_OPTION)["entity_id"] == (
+    assert _selector_config(result, CONF_TURN_ON_SELECTION_OPTION)["entity_id"] == (
         "select.wled_preset"
     )
     suggested = _suggested_values(result["data_schema"])
-    assert suggested[CONF_TURN_ON_SELECT_OPTION] == "Christmas"
-    assert suggested[CONF_TURN_ON_SELECT_SOURCE_ENTITY] == (
+    assert suggested[CONF_TURN_ON_SELECTION_OPTION] == "Christmas"
+    assert suggested[CONF_TURN_ON_SELECTION_SOURCE_ENTITY] == (
         "input_select.seasonal_theme"
     )
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
-            CONF_TURN_ON_SELECT_SOURCE_ENTITY: "input_select.desired_theme",
-            CONF_TURN_ON_SELECT_OPTION: "Warm White",
+            CONF_TURN_ON_SELECTION_SOURCE_ENTITY: "input_select.desired_theme",
+            CONF_TURN_ON_SELECTION_OPTION: "Warm White",
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
     cfg = entry_settings(light)
-    assert cfg[CONF_TURN_ON_SELECT_SOURCE_ENTITY] == "input_select.desired_theme"
-    assert cfg[CONF_TURN_ON_SELECT_OPTION] == "Warm White"
+    assert cfg[CONF_TURN_ON_SELECTION_SOURCE_ENTITY] == "input_select.desired_theme"
+    assert cfg[CONF_TURN_ON_SELECTION_OPTION] == "Warm White"
 
 
 @pytest.mark.asyncio
@@ -2412,9 +2416,9 @@ async def test_light_options_selection_not_prefilled_after_select_entity_change(
             CONF_NAME: "WLED",
             CONF_LIGHTS: ["light.wled_real"],
             CONF_TURN_OFF_TIMEOUT: 300,
-            CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset",
-            CONF_TURN_ON_SELECT_OPTION: "Christmas",
-            CONF_TURN_ON_SELECT_SOURCE_ENTITY: "input_select.seasonal_theme",
+            CONF_TURN_ON_SELECTION_ENTITY: "select.wled_preset",
+            CONF_TURN_ON_SELECTION_OPTION: "Christmas",
+            CONF_TURN_ON_SELECTION_SOURCE_ENTITY: "input_select.seasonal_theme",
         },
     )
     await setup_entries(hass, light)
@@ -2428,7 +2432,7 @@ async def test_light_options_selection_not_prefilled_after_select_entity_change(
             CONF_LIGHTS: ["light.wled_real"],
             CONF_TURN_OFF_TIMEOUT: 300,
             # Unavailable, so any fixed/fallback option would be accepted as is.
-            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.other"},
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.other"},
         },
     )
     assert result["step_id"] == "light_selection"
@@ -3279,19 +3283,19 @@ async def test_light_options_selection_step_keeps_a_blank_timeout(
             **EMPTY_LIGHT_SECTIONS,
             CONF_NAME: "Hall",
             CONF_LIGHTS: ["light.hall_real"],
-            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"},
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.scene"},
         },
     )
     assert result["step_id"] == "light_selection"
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "Cozy"}
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
     cfg = entry_settings(entry)
     assert CONF_TURN_OFF_TIMEOUT in cfg
     assert cfg[CONF_TURN_OFF_TIMEOUT] is None
-    assert cfg[CONF_TURN_ON_SELECT_OPTION] == "Cozy"
+    assert cfg[CONF_TURN_ON_SELECTION_OPTION] == "Cozy"
 
 
 @pytest.mark.asyncio
@@ -3312,14 +3316,14 @@ async def test_light_options_final_page_accepts_a_blank_timeout_raised_meanwhile
             CONF_NAME: "Hall",
             CONF_LIGHTS: ["light.hall_real"],
             SECTION_SENSORS: {CONF_OCCUPANCY_SENSOR: "binary_sensor.test_occupancy"},
-            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"},
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.scene"},
         },
     )
     assert result["step_id"] == "light_selection"
     await _raise_occupancy_timeout(hass, occupancy_entry, 120)
 
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "Cozy"}
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
@@ -3346,7 +3350,7 @@ async def test_occupancy_options_ignore_a_blank_timeout_light(
         result["flow_id"],
         {
             CONF_NAME: "Test Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 3600,
             SECTION_ADVANCED: {},
         },
@@ -3449,7 +3453,7 @@ async def test_occupancy_options_reject_timeout_above_turn_off_timeout(
         result["flow_id"],
         {
             CONF_NAME: "Test Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 120,  # > the light's 60s timeout
             SECTION_ADVANCED: {},
         },
@@ -3461,7 +3465,7 @@ async def test_occupancy_options_reject_timeout_above_turn_off_timeout(
         result["flow_id"],
         {
             CONF_NAME: "Test Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 60,  # equal to the light's 60s fits
             SECTION_ADVANCED: {},
         },
@@ -3476,7 +3480,7 @@ async def test_occupancy_options_reject_molight_source_from_stale_form(
     """Options re-check a MoLight source created after the form was opened."""
     await setup_entries(hass, occupancy_entry)
     result = await hass.config_entries.options.async_init(occupancy_entry.entry_id)
-    assert _selector_config(result, CONF_OCCUPANCY_SENSOR)["exclude_entities"] == [
+    assert _selector_config(result, CONF_OCCUPANCY_SOURCE)["exclude_entities"] == [
         "binary_sensor.test_occupancy"
     ]
 
@@ -3485,7 +3489,7 @@ async def test_occupancy_options_reject_molight_source_from_stale_form(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Other Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.other_motion",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.other_motion",
             CONF_OCCUPANCY_TIMEOUT: 30,
         },
     )
@@ -3494,14 +3498,14 @@ async def test_occupancy_options_reject_molight_source_from_stale_form(
         result["flow_id"],
         {
             CONF_NAME: "Test Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.other_occupancy",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.other_occupancy",
             CONF_OCCUPANCY_TIMEOUT: 30,
             SECTION_ADVANCED: {},
         },
     )
 
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {CONF_OCCUPANCY_SENSOR: "occupancy_source_molight"}
+    assert result["errors"] == {CONF_OCCUPANCY_SOURCE: "occupancy_source_molight"}
 
 
 @pytest.mark.asyncio
@@ -3516,13 +3520,13 @@ async def test_occupancy_source_pickers_narrow_to_occupancy_device_classes(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY}
     )
-    assert _selector_config(result, CONF_OCCUPANCY_SENSOR)["device_class"] == (
+    assert _selector_config(result, CONF_OCCUPANCY_SOURCE)["device_class"] == (
         device_classes
     )
 
     await setup_entries(hass, occupancy_entry)
     result = await hass.config_entries.options.async_init(occupancy_entry.entry_id)
-    assert _selector_config(result, CONF_OCCUPANCY_SENSOR)["device_class"] == (
+    assert _selector_config(result, CONF_OCCUPANCY_SOURCE)["device_class"] == (
         device_classes
     )
 
@@ -3537,7 +3541,7 @@ async def test_light_flow_validates_combined_timeout(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Test Occupancy 2",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_2",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_2",
             CONF_OCCUPANCY_TIMEOUT: 45,
         },
     )
@@ -3813,7 +3817,7 @@ async def test_discover_occupancy_filters_and_creates(hass: HomeAssistant) -> No
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Kitchen Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.kitchen_motion",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.kitchen_motion",
             CONF_OCCUPANCY_TIMEOUT: 30,
         },
     )
@@ -3845,7 +3849,7 @@ async def test_discover_occupancy_filters_and_creates(hass: HomeAssistant) -> No
     created = [
         e
         for e in hass.config_entries.async_entries(DOMAIN)
-        if entry_settings(e).get(CONF_OCCUPANCY_SENSOR) == "binary_sensor.hall_motion"
+        if entry_settings(e).get(CONF_OCCUPANCY_SOURCE) == "binary_sensor.hall_motion"
     ]
     assert len(created) == 1
     # Defaults applied.
@@ -3884,7 +3888,7 @@ async def test_discover_affix_targets_name(
     created = [
         e
         for e in hass.config_entries.async_entries(DOMAIN)
-        if entry_settings(e).get(CONF_OCCUPANCY_SENSOR) == "binary_sensor.hall_motion"
+        if entry_settings(e).get(CONF_OCCUPANCY_SOURCE) == "binary_sensor.hall_motion"
     ]
     assert len(created) == 1
     assert created[0].title == "Auto Hall Motion (occ)"
@@ -3924,7 +3928,7 @@ async def test_discover_affix_targets_entity_id(
     created = [
         e
         for e in hass.config_entries.async_entries(DOMAIN)
-        if entry_settings(e).get(CONF_OCCUPANCY_SENSOR) == "binary_sensor.hall_motion"
+        if entry_settings(e).get(CONF_OCCUPANCY_SOURCE) == "binary_sensor.hall_motion"
     ]
     assert len(created) == 1
     # Name is untouched; only the entity_id carries the affix.
@@ -3967,7 +3971,7 @@ async def test_discover_illuminance_creates_with_defaults(
     created = [
         e
         for e in hass.config_entries.async_entries(DOMAIN)
-        if entry_settings(e).get(CONF_ILLUMINANCE_SENSOR) == "sensor.office_lux"
+        if entry_settings(e).get(CONF_ILLUMINANCE_SOURCE) == "sensor.office_lux"
     ]
     assert len(created) == 1
     assert created[0].data[CONF_ENTITY_TYPE] == ENTITY_TYPE_ILLUMINANCE
@@ -4114,7 +4118,7 @@ async def test_discover_light_creates_with_turn_on_selection(
         {
             **EMPTY_LIGHT_SECTIONS,
             SECTION_BEHAVIOR: {
-                CONF_TURN_ON_SELECT_ENTITY: "select.desk_preset",
+                CONF_TURN_ON_SELECTION_ENTITY: "select.desk_preset",
             },
         },
     )
@@ -4122,7 +4126,7 @@ async def test_discover_light_creates_with_turn_on_selection(
     assert result["step_id"] == "light_selection"
 
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Relax"}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "Relax"}
     )
     assert result["type"] == FlowResultType.ABORT
     await hass.async_block_till_done()
@@ -4133,8 +4137,8 @@ async def test_discover_light_creates_with_turn_on_selection(
         if entry_settings(entry).get(CONF_LIGHTS) == ["light.desk"]
     ]
     assert len(created) == 1
-    assert created[0].data[CONF_TURN_ON_SELECT_ENTITY] == "select.desk_preset"
-    assert created[0].data[CONF_TURN_ON_SELECT_OPTION] == "Relax"
+    assert created[0].data[CONF_TURN_ON_SELECTION_ENTITY] == "select.desk_preset"
+    assert created[0].data[CONF_TURN_ON_SELECTION_OPTION] == "Relax"
 
 
 @pytest.mark.asyncio
@@ -4221,7 +4225,7 @@ async def test_discover_never_offers_molight_own_entities(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Virtual Occ",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.some_source",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.some_source",
             CONF_OCCUPANCY_TIMEOUT: 30,
         },
     )
@@ -4401,7 +4405,7 @@ async def test_create_explicit_entity_id(hass: HomeAssistant) -> None:
         result["flow_id"],
         {
             CONF_NAME: "Hall Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.hall_motion",
             CONF_OCCUPANCY_TIMEOUT: 60,
             SECTION_ADVANCED: {CONF_ENTITY_ID: "hall_presence"},
         },
@@ -4425,7 +4429,7 @@ async def test_create_explicit_entity_id_is_normalized(hass: HomeAssistant) -> N
         result["flow_id"],
         {
             CONF_NAME: "Hall Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.hall_motion",
             CONF_OCCUPANCY_TIMEOUT: 60,
             SECTION_ADVANCED: {CONF_ENTITY_ID: "binary_sensor.Hall Presence"},
         },
@@ -4451,7 +4455,7 @@ async def test_create_whitespace_entity_id_treated_as_blank(
         result["flow_id"],
         {
             CONF_NAME: "Hall Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.hall_motion",
             CONF_OCCUPANCY_TIMEOUT: 60,
             SECTION_ADVANCED: {CONF_ENTITY_ID: "   "},
         },
@@ -4479,7 +4483,7 @@ async def test_create_explicit_entity_id_conflict_errors(
         result["flow_id"],
         {
             CONF_NAME: "Hall Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.hall_motion",
             CONF_OCCUPANCY_TIMEOUT: 60,
             SECTION_ADVANCED: {CONF_ENTITY_ID: "taken"},
         },
@@ -4506,7 +4510,7 @@ async def test_create_explicit_entity_id_no_usable_characters_errors(
             result["flow_id"],
             {
                 CONF_NAME: "Hall Occupancy",
-                CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
+                CONF_OCCUPANCY_SOURCE: "binary_sensor.hall_motion",
                 CONF_OCCUPANCY_TIMEOUT: 60,
                 SECTION_ADVANCED: {CONF_ENTITY_ID: garbage},
             },
@@ -4518,7 +4522,7 @@ async def test_create_explicit_entity_id_no_usable_characters_errors(
         result["flow_id"],
         {
             CONF_NAME: "Hall Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.hall_motion",
             CONF_OCCUPANCY_TIMEOUT: 60,
             SECTION_ADVANCED: {CONF_ENTITY_ID: "unknown"},
         },
@@ -4540,7 +4544,7 @@ async def test_create_blank_entity_id_already_exists_proceed(
         result["flow_id"],
         {
             CONF_NAME: "Hall",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.hall_motion",
             CONF_OCCUPANCY_TIMEOUT: 60,
             SECTION_ADVANCED: {},
         },
@@ -4575,7 +4579,7 @@ async def test_create_blank_entity_id_already_exists_change(
         result["flow_id"],
         {
             CONF_NAME: "Hall",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.hall_motion",
             CONF_OCCUPANCY_TIMEOUT: 60,
             SECTION_ADVANCED: {},
         },
@@ -4601,7 +4605,7 @@ async def test_create_blank_entity_id_already_exists_change(
         result["flow_id"],
         {
             CONF_NAME: "Hall",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.hall_motion",
             CONF_OCCUPANCY_TIMEOUT: 60,
             SECTION_ADVANCED: {CONF_ENTITY_ID: "hall_presence"},
         },
@@ -4886,7 +4890,7 @@ _ASSIGN_ROLES = {
         "assign_schedule",
         {
             CONF_ASSIGN_SENSOR: "binary_sensor.test_schedule",
-            CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
+            CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE_TURN_OFF,
         },
         CONF_SCHEDULE_SENSOR,
     ),
@@ -5048,14 +5052,14 @@ async def test_config_flow_illuminance(hass: HomeAssistant) -> None:
         result["flow_id"],
         {
             CONF_NAME: "Hall Illuminance",
-            CONF_ILLUMINANCE_SENSOR: "sensor.hall_lux",
+            CONF_ILLUMINANCE_SOURCE: "sensor.hall_lux",
             CONF_ILLUMINANCE_THRESHOLD: 25.0,
             SECTION_ADVANCED: {},
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["title"] == "Hall Illuminance"
-    assert result["data"][CONF_ILLUMINANCE_SENSOR] == "sensor.hall_lux"
+    assert result["data"][CONF_ILLUMINANCE_SOURCE] == "sensor.hall_lux"
     assert result["data"][CONF_ILLUMINANCE_THRESHOLD] == 25.0
     # Unsubmitted hysteresis falls back to its schema default.
     assert result["data"][CONF_ILLUMINANCE_HYSTERESIS] == 0.0
@@ -5074,7 +5078,7 @@ async def test_config_flow_illuminance_rejects_hysteresis_at_threshold(
         result["flow_id"],
         {
             CONF_NAME: "Hall Illuminance",
-            CONF_ILLUMINANCE_SENSOR: "sensor.hall_lux",
+            CONF_ILLUMINANCE_SOURCE: "sensor.hall_lux",
             CONF_ILLUMINANCE_THRESHOLD: 10.0,
             CONF_ILLUMINANCE_HYSTERESIS: 10.0,
             SECTION_ADVANCED: {},
@@ -5104,7 +5108,7 @@ async def test_illuminance_options_round_trip(
         result["flow_id"],
         {
             CONF_NAME: "Test Illuminance",
-            CONF_ILLUMINANCE_SENSOR: "sensor.lux_2",
+            CONF_ILLUMINANCE_SOURCE: "sensor.lux_2",
             CONF_ILLUMINANCE_THRESHOLD: 42.0,
             CONF_ILLUMINANCE_HYSTERESIS: 2.5,
         },
@@ -5113,7 +5117,7 @@ async def test_illuminance_options_round_trip(
     await hass.async_block_till_done()
 
     cfg = entry_settings(illuminance_entry)
-    assert cfg[CONF_ILLUMINANCE_SENSOR] == "sensor.lux_2"
+    assert cfg[CONF_ILLUMINANCE_SOURCE] == "sensor.lux_2"
     assert cfg[CONF_ILLUMINANCE_THRESHOLD] == 42.0
     assert cfg[CONF_ILLUMINANCE_HYSTERESIS] == 2.5
 
@@ -5130,7 +5134,7 @@ async def test_illuminance_options_reject_hysteresis_at_threshold(
         result["flow_id"],
         {
             CONF_NAME: "Test Illuminance",
-            CONF_ILLUMINANCE_SENSOR: "sensor.lux_2",
+            CONF_ILLUMINANCE_SOURCE: "sensor.lux_2",
             CONF_ILLUMINANCE_THRESHOLD: 10.0,
             CONF_ILLUMINANCE_HYSTERESIS: 12.0,
         },
@@ -5153,7 +5157,7 @@ async def _submit_illuminance_band(
             result["flow_id"],
             {
                 CONF_NAME: "Hall Illuminance",
-                CONF_ILLUMINANCE_SENSOR: "sensor.hall_lux",
+                CONF_ILLUMINANCE_SOURCE: "sensor.hall_lux",
                 **band,
                 SECTION_ADVANCED: {},
             },
@@ -5164,7 +5168,7 @@ async def _submit_illuminance_band(
             data={
                 CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
                 CONF_NAME: "Hall Illuminance",
-                CONF_ILLUMINANCE_SENSOR: "sensor.hall_lux",
+                CONF_ILLUMINANCE_SOURCE: "sensor.hall_lux",
                 CONF_ILLUMINANCE_THRESHOLD: 10.0,
             },
         )
@@ -5174,7 +5178,7 @@ async def _submit_illuminance_band(
             result["flow_id"],
             {
                 CONF_NAME: "Hall Illuminance",
-                CONF_ILLUMINANCE_SENSOR: "sensor.hall_lux",
+                CONF_ILLUMINANCE_SOURCE: "sensor.hall_lux",
                 **band,
             },
         )
@@ -5226,7 +5230,7 @@ async def test_combined_options_reject_constituent_above_turn_off_timeout(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Big Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_big",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_big",
             CONF_OCCUPANCY_TIMEOUT: 120,
         },
     )
@@ -5235,7 +5239,7 @@ async def test_combined_options_reject_constituent_above_turn_off_timeout(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Even Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_even",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_even",
             CONF_OCCUPANCY_TIMEOUT: 60,
         },
     )
@@ -5300,7 +5304,7 @@ async def test_combined_options_clear_maintain_sensors(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Hall Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_hall",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_hall",
             CONF_OCCUPANCY_TIMEOUT: 30,
         },
     )
@@ -5512,7 +5516,7 @@ async def test_occupancy_options_validate_through_nested_combined(
         result["flow_id"],
         {
             CONF_NAME: "Test Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 90,  # > the light's 60s timeout
             SECTION_ADVANCED: {
                 CONF_FALSE_DETECTION_GRACE: 0,
@@ -5527,7 +5531,7 @@ async def test_occupancy_options_validate_through_nested_combined(
         result["flow_id"],
         {
             CONF_NAME: "Test Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 60,  # equal to the light's 60s fits
             SECTION_ADVANCED: {
                 CONF_FALSE_DETECTION_GRACE: 0,
@@ -5552,7 +5556,7 @@ async def test_assign_schedule_sets_mode(
         result["flow_id"],
         {
             CONF_ASSIGN_SENSOR: "binary_sensor.test_schedule",
-            CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
+            CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE_TURN_OFF,
         },
     )
     result = await hass.config_entries.flow.async_configure(
@@ -5564,7 +5568,7 @@ async def test_assign_schedule_sets_mode(
 
     cfg = entry_settings(light)
     assert cfg[CONF_SCHEDULE_SENSOR] == "binary_sensor.test_schedule"
-    assert cfg[CONF_SCHEDULE_MODE] == SCHEDULE_MODE_GATE
+    assert cfg[CONF_SCHEDULE_MODE] == SCHEDULE_MODE_GATE_TURN_OFF
 
 
 @pytest.mark.asyncio
@@ -5580,7 +5584,7 @@ async def test_assign_schedule_rejects_non_schedule_sensor_from_stale_form(
         result["flow_id"],
         {
             CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
-            CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
+            CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE_TURN_OFF,
         },
     )
     assert result["step_id"] == "assign_schedule"
@@ -5625,13 +5629,13 @@ async def test_conversion_picker_labels_and_sorts_lights(hass: HomeAssistant) ->
             "Zulu",
             "zulu",
             schedule_sensor="binary_sensor.night",
-            schedule_mode=SCHEDULE_MODE_GATE,
+            schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
         ),
         _light_entry(
             "Alpha",
             "alpha",
             schedule_sensor="binary_sensor.dusk",
-            schedule_mode=SCHEDULE_MODE_GATE,
+            schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
         ),
     )
 
@@ -5652,7 +5656,7 @@ async def test_convert_schedule_gated_light_to_scheduled_in_place(
         "Kitchen",
         "kitchen",
         schedule_sensor="binary_sensor.night",
-        schedule_mode=SCHEDULE_MODE_GATE,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
         occupancy_sensor="binary_sensor.occupancy",
         maintain_occupancy_sensor="binary_sensor.maintain",
         illuminance_sensor="binary_sensor.illuminance",
@@ -5746,7 +5750,7 @@ async def test_convert_schedule_gated_light_to_scheduled_in_place(
     [
         (SCHEDULE_END_ACTION_KEEP, SCHEDULE_MODE_GATE_KEEP),
         (SCHEDULE_END_ACTION_SWITCH, SCHEDULE_MODE_GATE_SWITCH),
-        (SCHEDULE_END_ACTION_TURN_OFF, SCHEDULE_MODE_GATE),
+        (SCHEDULE_END_ACTION_TURN_OFF, SCHEDULE_MODE_GATE_TURN_OFF),
     ],
 )
 async def test_convert_scheduled_light_back_to_schedule_gated(
@@ -5812,7 +5816,7 @@ async def _convert(hass: HomeAssistant, direction: str, light: str) -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "mode",
-    [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
+    [SCHEDULE_MODE_GATE_TURN_OFF, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
 )
 async def test_conversion_round_trip_restores_settings_mapping(
     hass: HomeAssistant, mode: str
@@ -5840,7 +5844,7 @@ async def test_conversion_round_trip_restores_settings_mapping(
     assert (
         cfg[CONF_SCHEDULE_END_ACTION]
         == {
-            SCHEDULE_MODE_GATE: SCHEDULE_END_ACTION_TURN_OFF,
+            SCHEDULE_MODE_GATE_TURN_OFF: SCHEDULE_END_ACTION_TURN_OFF,
             SCHEDULE_MODE_GATE_SWITCH: SCHEDULE_END_ACTION_SWITCH,
             SCHEDULE_MODE_GATE_KEEP: SCHEDULE_END_ACTION_KEEP,
         }[mode]
@@ -5881,7 +5885,7 @@ async def test_options_form_opened_before_a_conversion_is_rejected(
             "kitchen",
             timeout=45,
             schedule_sensor="binary_sensor.night_schedule",
-            schedule_mode=SCHEDULE_MODE_GATE,
+            schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
         )
     else:
         light = _scheduled_light_entry("Kitchen", "kitchen")
@@ -5932,7 +5936,7 @@ async def test_conversion_round_trip_keeps_a_derived_entity_id(
             CONF_LIGHTS: ["light.porch_real"],
             CONF_TURN_OFF_TIMEOUT: 60,
             CONF_SCHEDULE_SENSOR: "binary_sensor.night",
-            CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
+            CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE_TURN_OFF,
         },
     )
     hass.states.async_set("binary_sensor.night", "off")
@@ -5982,7 +5986,7 @@ async def test_conversion_requires_at_least_one_selected_light(
             "Kitchen",
             "kitchen",
             schedule_sensor="binary_sensor.night",
-            schedule_mode=SCHEDULE_MODE_GATE,
+            schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
         ),
     )
 
@@ -6019,13 +6023,13 @@ async def test_bulk_conversion_is_atomic_when_selected_light_becomes_ineligible(
         "Kitchen",
         "kitchen",
         schedule_sensor="binary_sensor.night",
-        schedule_mode=SCHEDULE_MODE_GATE,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
     )
     pantry = _light_entry(
         "Pantry",
         "pantry",
         schedule_sensor="binary_sensor.dusk",
-        schedule_mode=SCHEDULE_MODE_GATE,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
     )
     await setup_entries(hass, kitchen, pantry)
     kitchen_data = dict(kitchen.data)
@@ -6065,13 +6069,13 @@ async def test_bulk_conversion_is_atomic_when_selected_light_is_removed(
         "Kitchen",
         "kitchen",
         schedule_sensor="binary_sensor.night",
-        schedule_mode=SCHEDULE_MODE_GATE,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
     )
     pantry = _light_entry(
         "Pantry",
         "pantry",
         schedule_sensor="binary_sensor.dusk",
-        schedule_mode=SCHEDULE_MODE_GATE,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
     )
     await setup_entries(hass, kitchen, pantry)
     kitchen_data = dict(kitchen.data)
@@ -6317,7 +6321,7 @@ async def test_discover_candidates_from_registry(hass: HomeAssistant) -> None:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Wrapped",
-            CONF_OCCUPANCY_SENSOR: wrapped.entity_id,
+            CONF_OCCUPANCY_SOURCE: wrapped.entity_id,
             CONF_OCCUPANCY_TIMEOUT: 30,
         },
     ).add_to_hass(hass)
@@ -6412,7 +6416,7 @@ async def test_schedule_options_require_window(
         pytest.param(
             ENTITY_TYPE_ILLUMINANCE,
             "binary_sensor.taken",
-            {CONF_NAME: "X", CONF_ILLUMINANCE_SENSOR: "sensor.lux_a"},
+            {CONF_NAME: "X", CONF_ILLUMINANCE_SOURCE: "sensor.lux_a"},
             id="illuminance",
         ),
         pytest.param(
@@ -7171,7 +7175,7 @@ async def test_discovery_count_reflects_entries_that_actually_got_created(
     real_import = MoLightConfigFlow.async_step_import
 
     async def _fail_the_porch(self, import_data):
-        if import_data[CONF_OCCUPANCY_SENSOR] == "binary_sensor.porch_pir":
+        if import_data[CONF_OCCUPANCY_SOURCE] == "binary_sensor.porch_pir":
             msg = "boom"
             raise ValueError(msg)
         return await real_import(self, import_data)
@@ -7198,7 +7202,7 @@ async def test_discovery_count_reflects_entries_that_actually_got_created(
     await hass.async_block_till_done()
 
     wrapped = {
-        entry_settings(e).get(CONF_OCCUPANCY_SENSOR)
+        entry_settings(e).get(CONF_OCCUPANCY_SOURCE)
         for e in hass.config_entries.async_entries(DOMAIN)
     }
     assert "binary_sensor.hall_motion" in wrapped
@@ -7209,13 +7213,13 @@ _DISCOVERY_TYPES = {
     "occupancy": (
         "binary_sensor",
         {"device_class": "motion"},
-        CONF_OCCUPANCY_SENSOR,
+        CONF_OCCUPANCY_SOURCE,
         {SECTION_ADVANCED: {}},
     ),
     "illuminance": (
         "sensor",
         {"device_class": "illuminance"},
-        CONF_ILLUMINANCE_SENSOR,
+        CONF_ILLUMINANCE_SOURCE,
         {},
     ),
     "light": ("light", {}, CONF_LIGHTS, EMPTY_LIGHT_SECTIONS),
@@ -7370,13 +7374,13 @@ async def test_light_selection_step_rejects_blank_option(
             CONF_NAME: "WLED",
             CONF_LIGHTS: ["light.wled"],
             CONF_TURN_OFF_TIMEOUT: 300,
-            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.wled_preset"},
         },
     )
     assert result["step_id"] == "light_selection"
 
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "   "}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "   "}
     )
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {"base": "turn_on_selection_incomplete"}
@@ -7401,13 +7405,13 @@ async def test_options_light_selection_invalid_option_errors(
             CONF_NAME: "WLED",
             CONF_LIGHTS: ["light.wled_real"],
             CONF_TURN_OFF_TIMEOUT: 300,
-            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.wled_preset"},
         },
     )
     assert result["step_id"] == "light_selection"
 
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Missing"}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "Missing"}
     )
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "light_selection"
@@ -7419,7 +7423,7 @@ async def test_convert_to_scheduled_requires_a_schedule(
     hass: HomeAssistant,
 ) -> None:
     """A light with gate modes but no schedule sensor is not convertible."""
-    light = _light_entry("Hall", "hall", schedule_mode=SCHEDULE_MODE_GATE)
+    light = _light_entry("Hall", "hall", schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF)
     await setup_entries(hass, light)
 
     result = await _reach_conversion(hass, "convert_to_scheduled")
@@ -7805,7 +7809,7 @@ async def test_light_options_final_page_rejects_cycle_closed_meanwhile(
                 **settings_set,
                 CONF_NAME: "Hall",
                 CONF_LIGHTS: ["light.outer"],
-                SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"},
+                SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.scene"},
             },
         )
         assert result["step_id"] == "light_selection"
@@ -7824,7 +7828,7 @@ async def test_light_options_final_page_rejects_cycle_closed_meanwhile(
         result["flow_id"],
         {**settings_set, SECTION_STANDBY: {}}
         if scheduled
-        else {CONF_TURN_ON_SELECT_OPTION: "Cozy"},
+        else {CONF_TURN_ON_SELECTION_OPTION: "Cozy"},
     )
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "light_member_cycle"
@@ -8082,7 +8086,7 @@ async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
                 **settings_set,
                 CONF_NAME: "Hall",
                 CONF_LIGHTS: ["light.free"],
-                SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"},
+                SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.scene"},
             },
         )
         assert result["step_id"] == "light_selection"
@@ -8100,7 +8104,7 @@ async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
         result["flow_id"],
         {**settings_set, SECTION_STANDBY: {}}
         if scheduled
-        else {CONF_TURN_ON_SELECT_OPTION: "Cozy"},
+        else {CONF_TURN_ON_SELECTION_OPTION: "Cozy"},
     )
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "light_shared"
@@ -8167,7 +8171,9 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
             CONF_LIGHTS: [member],
         }
         if last_step == "selection":
-            user_input[SECTION_BEHAVIOR] = {CONF_TURN_ON_SELECT_ENTITY: "select.scene"}
+            user_input[SECTION_BEHAVIOR] = {
+                CONF_TURN_ON_SELECTION_ENTITY: "select.scene"
+            }
         elif last_step == "wrapped_lights":
             user_input[CONF_LIGHTS] = [member, "light.inner"]
         result = await hass.config_entries.flow.async_configure(
@@ -8200,7 +8206,7 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
         )
 
     if last_step == "selection":
-        user_input = {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+        user_input = {CONF_TURN_ON_SELECTION_OPTION: "Cozy"}
     elif last_step == "scheduled_inside":
         user_input = {**settings_set, SECTION_STANDBY: {}}
     elif last_step == "wrapped_lights":
@@ -8265,7 +8271,7 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
         await setup_entries(hass, entry)
         flow = hass.config_entries.options
     keep_on = {SECTION_SENSORS: {CONF_KEEP_ON_ENTITIES: ["light.keep"]}}
-    select = {SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"}}
+    select = {SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.scene"}}
     settings_set = {**EMPTY_LIGHT_SECTIONS, CONF_TURN_OFF_TIMEOUT: 60}
     members = [member, "light.inner"] if "wrapped" in last_step else [member]
 
@@ -8346,7 +8352,7 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
             "light.keep", "off", {"entity_id": ["light.spare", added]}
         )
     if last_step.endswith("selection"):
-        user_input = {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+        user_input = {CONF_TURN_ON_SELECTION_OPTION: "Cozy"}
     elif last_step.endswith("inside"):
         user_input = {**settings_set, SECTION_STANDBY: {}}
     elif last_step.endswith("entity_id"):
@@ -8501,14 +8507,14 @@ async def _submit_wrap_form(
         CONF_TURN_OFF_TIMEOUT: 60,
     }
     if form.endswith("selection"):
-        user_input[SECTION_BEHAVIOR] = {CONF_TURN_ON_SELECT_ENTITY: "select.scene"}
+        user_input[SECTION_BEHAVIOR] = {CONF_TURN_ON_SELECTION_ENTITY: "select.scene"}
     result = await manager.async_configure(result["flow_id"], user_input)
     if first_page_only:
         return result
     if form.endswith("selection"):
         assert result["step_id"] == "light_selection"
         result = await manager.async_configure(
-            result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+            result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "Cozy"}
         )
     return result
 
@@ -8556,7 +8562,7 @@ async def test_light_forms_point_out_a_wrapped_virtual_light(
     saved = result["data"] if options else dict(result["result"].data)
     assert saved == {**plain, CONF_LIGHTS: ["light.other"]}
     if form.endswith("selection"):
-        assert saved[CONF_TURN_ON_SELECT_OPTION] == "Cozy"
+        assert saved[CONF_TURN_ON_SELECTION_OPTION] == "Cozy"
 
 
 @pytest.mark.asyncio
@@ -8745,11 +8751,11 @@ async def test_light_options_final_page_rejects_a_group_given_a_virtual_light(
                 CONF_NAME: "Den",
                 CONF_LIGHTS: ["light.living"],
                 CONF_TURN_OFF_TIMEOUT: 60,
-                SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"},
+                SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.scene"},
             },
         )
         assert result["step_id"] == "light_selection"
-        last_step = {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+        last_step = {CONF_TURN_ON_SELECTION_OPTION: "Cozy"}
 
     hass.states.async_set(
         "light.living", "off", {"entity_id": ["light.lamp", "light.other"]}
@@ -8914,7 +8920,7 @@ async def test_discovery_rechecks_picks_a_group_edit_made_overlap(
     assert result["step_id"] == "discover_light_defaults"
     defaults = dict(EMPTY_LIGHT_SECTIONS)
     if last_step == "selection":
-        defaults[SECTION_BEHAVIOR] = {CONF_TURN_ON_SELECT_ENTITY: "select.scene"}
+        defaults[SECTION_BEHAVIOR] = {CONF_TURN_ON_SELECTION_ENTITY: "select.scene"}
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], defaults
         )
@@ -8923,7 +8929,9 @@ async def test_discovery_rechecks_picks_a_group_edit_made_overlap(
     hass.states.async_set(edited, "off", {"entity_id": members})
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {CONF_TURN_ON_SELECT_OPTION: "Cozy"} if last_step == "selection" else defaults,
+        {CONF_TURN_ON_SELECTION_OPTION: "Cozy"}
+        if last_step == "selection"
+        else defaults,
     )
     assert result["step_id"] == "discover_light_select"
     assert result["errors"] == {"base": "discovery_picks_overlap"}
@@ -9401,7 +9409,7 @@ async def _raise_occupancy_timeout(
         result["flow_id"],
         {
             CONF_NAME: "Test Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: seconds,
             SECTION_ADVANCED: {},
         },
@@ -9427,7 +9435,7 @@ async def test_light_selection_step_rejects_timeout_raised_meanwhile(
         CONF_LIGHTS: ["light.hall_real"],
         CONF_TURN_OFF_TIMEOUT: 60,
         SECTION_SENSORS: {CONF_OCCUPANCY_SENSOR: "binary_sensor.test_occupancy"},
-        SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"},
+        SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.scene"},
     }
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -9439,7 +9447,7 @@ async def test_light_selection_step_rejects_timeout_raised_meanwhile(
     await _raise_occupancy_timeout(hass, occupancy_entry, 120)
 
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "Cozy"}
     )
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "light"
@@ -9450,7 +9458,7 @@ async def test_light_selection_step_rejects_timeout_raised_meanwhile(
     )
     assert result["step_id"] == "light_selection"
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "Cozy"}
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_TURN_OFF_TIMEOUT] == 120
@@ -9556,7 +9564,7 @@ async def test_discovery_selection_step_rejects_timeout_raised_meanwhile(
             **EMPTY_LIGHT_SECTIONS,
             CONF_TURN_OFF_TIMEOUT: 60,
             SECTION_SENSORS: {CONF_OCCUPANCY_SENSOR: "binary_sensor.test_occupancy"},
-            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.desk_preset"},
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.desk_preset"},
         },
     )
     assert result["step_id"] == "light_selection"
@@ -9564,7 +9572,7 @@ async def test_discovery_selection_step_rejects_timeout_raised_meanwhile(
     await _raise_occupancy_timeout(hass, occupancy_entry, 120)
 
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Relax"}
+        result["flow_id"], {CONF_TURN_ON_SELECTION_OPTION: "Relax"}
     )
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "discover_light_defaults"
@@ -9620,7 +9628,7 @@ async def test_light_options_final_page_rejects_timeout_raised_meanwhile(
                 **referencing,
                 CONF_NAME: "Hall",
                 CONF_LIGHTS: ["light.hall_real"],
-                SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"},
+                SECTION_BEHAVIOR: {CONF_TURN_ON_SELECTION_ENTITY: "select.scene"},
             },
         )
         assert result["step_id"] == "light_selection"
@@ -9631,7 +9639,7 @@ async def test_light_options_final_page_rejects_timeout_raised_meanwhile(
         result["flow_id"],
         {**EMPTY_INSIDE_LIGHT_SECTIONS, CONF_TURN_OFF_TIMEOUT: 300}
         if scheduled
-        else {CONF_TURN_ON_SELECT_OPTION: "Cozy"},
+        else {CONF_TURN_ON_SELECTION_OPTION: "Cozy"},
     )
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "scheduled_light_outside" if scheduled else "light"
@@ -9898,7 +9906,7 @@ def _name_form_entry(form: str) -> MockConfigEntry:
     data: dict[str, Any] = {
         "occupancy": {
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion",
             CONF_OCCUPANCY_TIMEOUT: 60,
         },
         "combined_occupancy": {
@@ -9907,7 +9915,7 @@ def _name_form_entry(form: str) -> MockConfigEntry:
         },
         "illuminance": {
             CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
-            CONF_ILLUMINANCE_SENSOR: "sensor.hall_lux",
+            CONF_ILLUMINANCE_SOURCE: "sensor.hall_lux",
             CONF_ILLUMINANCE_THRESHOLD: 25.0,
         },
         "schedule_time": {
@@ -9982,12 +9990,12 @@ async def _open_name_form(
         )
     values = {
         "occupancy": {
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion",
             CONF_OCCUPANCY_TIMEOUT: 60,
         },
         "combined_occupancy": {CONF_TRIGGER_SENSORS: ["binary_sensor.occ_a"]},
         "illuminance": {
-            CONF_ILLUMINANCE_SENSOR: "sensor.hall_lux",
+            CONF_ILLUMINANCE_SOURCE: "sensor.hall_lux",
             CONF_ILLUMINANCE_THRESHOLD: 25.0,
         },
         "schedule_time": {"start": {"time": "21:00:00"}, "end": {"time": "07:00:00"}},
@@ -10596,7 +10604,7 @@ async def test_combined_occupancy_does_not_save_a_constituent_deleted_while_open
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Desk Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_2",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_2",
             CONF_OCCUPANCY_TIMEOUT: 30,
         },
     )
@@ -11257,7 +11265,7 @@ async def test_occupancy_options_check_lights_using_it_in_either_role(
             result["flow_id"],
             {
                 CONF_NAME: "Test Occupancy",
-                CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+                CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
                 CONF_OCCUPANCY_TIMEOUT: seconds,
                 SECTION_ADVANCED: {},
             },
@@ -11310,7 +11318,7 @@ async def test_occupancy_options_check_lights_through_nested_combined_sensors(
         result["flow_id"],
         {
             CONF_NAME: "Test Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 120,
             SECTION_ADVANCED: {},
         },
@@ -11407,7 +11415,7 @@ async def test_standby_color_needs_a_light_that_can_show_it(
     ("schedule", "mode", "choice", "saved"),
     [
         (False, None, MATCH_SCHEDULE_AFTER_RESTART_INSIDE, False),
-        (True, SCHEDULE_MODE_GATE, MATCH_SCHEDULE_AFTER_RESTART_INSIDE, False),
+        (True, SCHEDULE_MODE_GATE_TURN_OFF, MATCH_SCHEDULE_AFTER_RESTART_INSIDE, False),
         (True, SCHEDULE_MODE_FOLLOW, MATCH_SCHEDULE_AFTER_RESTART_INSIDE, True),
         (False, None, MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND, True),
     ],
@@ -11475,7 +11483,7 @@ async def test_light_options_reject_match_schedule_after_restart_in_gate_mode(
                 CONF_TURN_OFF_TIMEOUT: 60,
                 SECTION_SENSORS: {
                     CONF_SCHEDULE_SENSOR: "binary_sensor.test_schedule",
-                    CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
+                    CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE_TURN_OFF,
                     CONF_MATCH_SCHEDULE_AFTER_RESTART: choice,
                 },
             },
@@ -11489,7 +11497,7 @@ async def test_light_options_reject_match_schedule_after_restart_in_gate_mode(
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
     cfg = entry_settings(light)
-    assert cfg[CONF_SCHEDULE_MODE] == SCHEDULE_MODE_GATE
+    assert cfg[CONF_SCHEDULE_MODE] == SCHEDULE_MODE_GATE_TURN_OFF
     assert (
         cfg[CONF_MATCH_SCHEDULE_AFTER_RESTART] == MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND
     )
@@ -11545,7 +11553,7 @@ async def test_convert_to_scheduled_strips_the_match_choice(
         "Kitchen",
         "kitchen",
         schedule_sensor="binary_sensor.night",
-        schedule_mode=SCHEDULE_MODE_GATE,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
         match_schedule_after_restart=MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND,
     )
     hass.states.async_set("binary_sensor.night", "off")

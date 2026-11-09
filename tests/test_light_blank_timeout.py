@@ -20,7 +20,7 @@ from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
     CONF_NAME,
-    CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     DOMAIN,
     DOOR_MODE_OPEN,
@@ -92,7 +92,7 @@ def _fd_occupancy_entry() -> MockConfigEntry:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "FD Occupancy",
-            CONF_OCCUPANCY_SENSOR: MOTION,
+            CONF_OCCUPANCY_SOURCE: MOTION,
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_FALSE_DETECTION_GRACE: 3,
         },

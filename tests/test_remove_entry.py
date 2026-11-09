@@ -33,6 +33,7 @@ from custom_components.molight.const import (
     CONF_DOOR_SENSOR,
     CONF_ENTITY_TYPE,
     CONF_ILLUMINANCE_SENSOR,
+    CONF_ILLUMINANCE_SOURCE,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_KEEP_ON_ENTITIES,
@@ -41,6 +42,7 @@ from custom_components.molight.const import (
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
     CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_ON_BUTTONS_SINGLE,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
@@ -61,7 +63,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_SCHEDULE,
     ENTITY_TYPE_SCHEDULED_LIGHT,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
-    SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_TURN_OFF,
 )
 from custom_components.molight.helpers import entry_settings
 from tests.conftest import make_light_entry, make_scheduled_light_entry, settle
@@ -97,7 +99,7 @@ def _occupancy_entry() -> MockConfigEntry:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Rm Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_rm",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_rm",
             CONF_OCCUPANCY_TIMEOUT: 30,
         },
     )
@@ -121,7 +123,7 @@ def _illuminance_entry() -> MockConfigEntry:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
             CONF_NAME: "Rm Illuminance",
-            CONF_ILLUMINANCE_SENSOR: "sensor.lux_rm",
+            CONF_ILLUMINANCE_SOURCE: "sensor.lux_rm",
             CONF_ILLUMINANCE_THRESHOLD: 10.0,
         },
     )
@@ -358,7 +360,7 @@ async def test_remove_entry_removes_references_from_surviving_entries(
         name="Rm Light",
         occupancy="binary_sensor.rm_occupancy",
         schedule="binary_sensor.rm_schedule",
-        schedule_mode=SCHEDULE_MODE_GATE,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
         keep_on_entities=["binary_sensor.rm_occupancy", "input_boolean.guest"],
     )
     for entry in (occupancy, schedule, combined, light):
@@ -585,7 +587,7 @@ async def test_remove_entry_keeps_a_sensor_entry_source(hass: HomeAssistant) -> 
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Wrapper",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.rm_occupancy",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.rm_occupancy",
             CONF_OCCUPANCY_TIMEOUT: 30,
         },
     )
@@ -599,7 +601,7 @@ async def test_remove_entry_keeps_a_sensor_entry_source(hass: HomeAssistant) -> 
 
     assert not wrapper.options
     assert (
-        entry_settings(wrapper)[CONF_OCCUPANCY_SENSOR] == "binary_sensor.rm_occupancy"
+        entry_settings(wrapper)[CONF_OCCUPANCY_SOURCE] == "binary_sensor.rm_occupancy"
     )
 
 

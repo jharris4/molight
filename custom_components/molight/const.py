@@ -90,8 +90,7 @@ ASSIGN_ROLE_MAINTAIN = "maintain"
 ASSIGN_ROLES = [ASSIGN_ROLE_OCCUPANCY, ASSIGN_ROLE_MAINTAIN]
 
 # --- Virtual Occupancy Sensor (one real sensor) ---
-# The real binary_sensor; on a Virtual Light, its occupancy sensor.
-CONF_OCCUPANCY_SENSOR = "occupancy_sensor"
+CONF_OCCUPANCY_SOURCE = "occupancy_source"  # the real binary_sensor
 # latest_occupied_time is computed as last_off minus this timeout
 CONF_OCCUPANCY_TIMEOUT = "occupancy_timeout"
 DEFAULT_OCCUPANCY_TIMEOUT = 120
@@ -118,8 +117,7 @@ CONF_TRIGGER_SENSORS = "trigger_sensors"
 CONF_MAINTAIN_SENSORS = "maintain_sensors"
 
 # --- Virtual Illuminance Sensor ---
-# The real sensor; on a Virtual Light, its illuminance sensor.
-CONF_ILLUMINANCE_SENSOR = "illuminance_sensor"
+CONF_ILLUMINANCE_SOURCE = "illuminance_source"  # the real sensor
 CONF_ILLUMINANCE_THRESHOLD = "illuminance_threshold"  # on = value >= threshold (bright)
 DEFAULT_ILLUMINANCE_THRESHOLD = 10.0
 # Hysteresis band (lx) around the threshold: becomes bright at
@@ -221,13 +219,13 @@ ATTR_MANUAL_OFF_CLEARED = "manual_off_cleared"
 # WLED presets are exposed as select entities, and the same mechanism works for
 # any integration with a select-backed scene/preset. Both keys must be present;
 # absent = no turn-on selection. Physical member-light turn-ons are not affected.
-CONF_TURN_ON_SELECT_ENTITY = "turn_on_select_entity"
-CONF_TURN_ON_SELECT_OPTION = "turn_on_select_option"
+CONF_TURN_ON_SELECTION_ENTITY = "turn_on_selection_entity"
+CONF_TURN_ON_SELECTION_OPTION = "turn_on_selection_option"
 # Optional select/input_select whose current state supplies the option at
 # turn-on time. When it is missing, unavailable, unknown, or not accepted by
-# the turn-on selection entity, turn_on_select_option is used as the
+# the turn-on selection entity, turn_on_selection_option is used as the
 # fixed/fallback option.
-CONF_TURN_ON_SELECT_SOURCE_ENTITY = "turn_on_select_source_entity"
+CONF_TURN_ON_SELECTION_SOURCE_ENTITY = "turn_on_selection_source_entity"
 # When occupancy clears and the sensor flags the visit as a false detection,
 # lights that were lit BY that visit turn off after this short delay instead
 # of the turn-off timer. Lights turned on manually are never affected.
@@ -282,8 +280,9 @@ CONF_AUTO_ON_TRANSITION = "auto_on_transition"
 CONF_AUTO_OFF_TRANSITION = "auto_off_transition"
 CONF_EFFECT_TRANSITION = "effect_transition"
 CONF_WARN_TRANSITION = "warn_transition"
-# Optional references to virtual entities (entity_ids). The occupancy and
-# illuminance sensor keys are CONF_OCCUPANCY_SENSOR and CONF_ILLUMINANCE_SENSOR above.
+# Optional references to virtual entities (entity_ids).
+CONF_OCCUPANCY_SENSOR = "occupancy_sensor"
+CONF_ILLUMINANCE_SENSOR = "illuminance_sensor"
 # What turns the light on for occupancy:
 #   molight:                  MoLight does.
 #   own_system:               the light's own system (a Lutron occupancy
@@ -399,7 +398,7 @@ DEFAULT_ILLUMINANCE_MODE = ILLUMINANCE_MODE_CONTROL
 
 # How the schedule sensor affects the light:
 #   follow:       lights turn on at window start and off at window end (porch lights)
-#   gate:         occupancy may only turn lights on inside the window; the
+#   gate_turn_off: occupancy may only turn lights on inside the window; the
 #                 window end forces the lights off (the original behavior)
 #   gate_switch:  the same turn-on gate, but the window end recalculates an
 #                 already-on light from current sensor state and
@@ -408,12 +407,12 @@ DEFAULT_ILLUMINANCE_MODE = ILLUMINANCE_MODE_CONTROL
 #                 already-on light in its current state
 CONF_SCHEDULE_MODE = "schedule_mode"
 SCHEDULE_MODE_FOLLOW = "follow"
-SCHEDULE_MODE_GATE = "gate"
+SCHEDULE_MODE_GATE_TURN_OFF = "gate_turn_off"
 SCHEDULE_MODE_GATE_SWITCH = "gate_switch"
 SCHEDULE_MODE_GATE_KEEP = "gate_keep"
 SCHEDULE_MODES = [
     SCHEDULE_MODE_FOLLOW,
-    SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_TURN_OFF,
     SCHEDULE_MODE_GATE_SWITCH,
     SCHEDULE_MODE_GATE_KEEP,
 ]

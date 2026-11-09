@@ -34,7 +34,7 @@ from custom_components.molight.const import (
     REASON_SCHEDULE,
     REASON_SCHEDULE_START,
     SCHEDULE_MODE_FOLLOW,
-    SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_TURN_OFF,
     STATE_COUNTDOWN,
     STATE_IDLE,
     STATE_OCCUPIED,
@@ -173,7 +173,7 @@ async def test_a_turn_on_inside_the_wait_skips_a_gate_window(
     """Outside a gate-mode window, the light's own turn-on still counts."""
     records, calls, lamp = await _setup(
         hass,
-        _hall(choice, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE),
+        _hall(choice, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF),
         binary_sensor__occ="off",
         binary_sensor__sched="off",
     )
@@ -196,7 +196,7 @@ async def test_the_fallback_is_blocked_outside_a_gate_window(hass, freezer) -> N
         _hall(
             OCCUPANCY_TURN_ON_OWN_SYSTEM_THEN_MOLIGHT,
             schedule=SCHED,
-            schedule_mode=SCHEDULE_MODE_GATE,
+            schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
         ),
         binary_sensor__occ="off",
         binary_sensor__sched="off",
@@ -392,8 +392,8 @@ async def test_the_follow_up_applies_the_turn_on_selection(hass, freezer) -> Non
         hass,
         _hall(
             OCCUPANCY_TURN_ON_OWN_SYSTEM,
-            turn_on_select_entity="select.scene",
-            turn_on_select_option="Cozy",
+            turn_on_selection_entity="select.scene",
+            turn_on_selection_option="Cozy",
         ),
         binary_sensor__occ="off",
     )
@@ -622,7 +622,7 @@ async def test_going_dark_in_an_occupied_room(hass, choice, lit) -> None:
 async def test_a_gate_window_start_in_an_occupied_room(hass, choice, lit) -> None:
     records, calls, _lamp = await _setup(
         hass,
-        _hall(choice, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE),
+        _hall(choice, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF),
         binary_sensor__occ="off",
         binary_sensor__sched="off",
     )

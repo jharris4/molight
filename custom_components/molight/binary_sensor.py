@@ -60,11 +60,11 @@ from .const import (
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
     CONF_ILLUMINANCE_HYSTERESIS,
-    CONF_ILLUMINANCE_SENSOR,
+    CONF_ILLUMINANCE_SOURCE,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
-    CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_SCHEDULE_DEFINITION,
     CONF_SCHEDULE_INPUTS,
@@ -236,7 +236,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
         self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
         self._entry_id = entry.entry_id
-        self._source_sensor: str = cfg[CONF_OCCUPANCY_SENSOR]
+        self._source_sensor: str = cfg[CONF_OCCUPANCY_SOURCE]
         self._timeout: int = int(
             cfg.get(CONF_OCCUPANCY_TIMEOUT, DEFAULT_OCCUPANCY_TIMEOUT)
         )
@@ -1141,7 +1141,7 @@ class VirtualIlluminanceSensor(BinarySensorEntity, EntityIdFollowingRestoreEntit
         self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
 
-        self._source_entity: str = cfg[CONF_ILLUMINANCE_SENSOR]
+        self._source_entity: str = cfg[CONF_ILLUMINANCE_SOURCE]
         self._threshold: float = float(
             cfg.get(CONF_ILLUMINANCE_THRESHOLD, DEFAULT_ILLUMINANCE_THRESHOLD)
         )

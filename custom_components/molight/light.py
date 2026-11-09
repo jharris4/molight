@@ -355,9 +355,9 @@ from .const import (
     CONF_STANDBY_BRIGHTNESS,
     CONF_STANDBY_COLOR_TEMP,
     CONF_STANDBY_RGB_COLOR,
-    CONF_TURN_ON_SELECT_ENTITY,
-    CONF_TURN_ON_SELECT_OPTION,
-    CONF_TURN_ON_SELECT_SOURCE_ENTITY,
+    CONF_TURN_ON_SELECTION_ENTITY,
+    CONF_TURN_ON_SELECTION_OPTION,
+    CONF_TURN_ON_SELECTION_SOURCE_ENTITY,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_COLOR_TEMP,
     CONF_WARN_DURATION,
@@ -411,9 +411,9 @@ from .const import (
     SCHEDULE_END_ACTION_SWITCH,
     SCHEDULE_END_ACTION_TURN_OFF,
     SCHEDULE_MODE_FOLLOW,
-    SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
     SCHEDULE_MODE_GATE_SWITCH,
+    SCHEDULE_MODE_GATE_TURN_OFF,
     SIGNAL_AUTO_OFF_TOGGLED,
     STAGE_CANCELLED,
     STAGE_EFFECT,
@@ -1253,9 +1253,11 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         self._standby_color = _opt_color(
             cfg, CONF_STANDBY_COLOR_TEMP, CONF_STANDBY_RGB_COLOR
         )
-        self._turn_on_select_entity = cfg.get(CONF_TURN_ON_SELECT_ENTITY)
-        self._turn_on_select_option = cfg.get(CONF_TURN_ON_SELECT_OPTION)
-        self._turn_on_select_source_entity = cfg.get(CONF_TURN_ON_SELECT_SOURCE_ENTITY)
+        self._turn_on_selection_entity = cfg.get(CONF_TURN_ON_SELECTION_ENTITY)
+        self._turn_on_selection_option = cfg.get(CONF_TURN_ON_SELECTION_OPTION)
+        self._turn_on_selection_source_entity = cfg.get(
+            CONF_TURN_ON_SELECTION_SOURCE_ENTITY
+        )
 
         # Off warning sequence run at an automatic turn-off instead of an immediate
         # off. A duration of 0 disables its stage; effect_brightness is a 0-255
@@ -1396,7 +1398,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             if not self._is_scheduled_light:
                 # A Gate and turn off schedule end off pending the hold's release.
                 self._schedule_end_off_pending = (
-                    self._schedule_mode == SCHEDULE_MODE_GATE
+                    self._schedule_mode == SCHEDULE_MODE_GATE_TURN_OFF
                     and bool(self._schedule_sensor)
                     and bool(last.attributes.get(ATTR_SCHEDULE_END_OFF_PENDING))
                 )
@@ -3282,9 +3284,11 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
     def _turn_on_select_device(self) -> str | None:
         """Return the device of the active settings' select entity, if any."""
-        if not self._turn_on_select_entity:
+        if not self._turn_on_selection_entity:
             return None
-        registry_entry = er.async_get(self.hass).async_get(self._turn_on_select_entity)
+        registry_entry = er.async_get(self.hass).async_get(
+            self._turn_on_selection_entity
+        )
         return registry_entry.device_id if registry_entry is not None else None
 
     def _all_lights_off(self) -> bool:
@@ -3732,7 +3736,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         schedule blocks turn-ons, but ends no hold that its window allowed.
         """
         if not self._schedule_sensor or self._schedule_mode not in (
-            SCHEDULE_MODE_GATE,
+            SCHEDULE_MODE_GATE_TURN_OFF,
             SCHEDULE_MODE_GATE_SWITCH,
             SCHEDULE_MODE_GATE_KEEP,
         ):
@@ -3749,7 +3753,10 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
     def _gate_and_turn_off_schedule_inactive(self) -> bool:
         """Return True when a Gate and turn off schedule reads off."""
-        if self._schedule_mode != SCHEDULE_MODE_GATE or not self._schedule_sensor:
+        if (
+            self._schedule_mode != SCHEDULE_MODE_GATE_TURN_OFF
+            or not self._schedule_sensor
+        ):
             return False
         state = self.hass.states.get(self._schedule_sensor)
         return state is not None and state.state == "off"
@@ -4010,7 +4017,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         if new_state.state != "on":
             if replay or first:
                 return  # still outside the schedule window: nothing ended
-            if self._schedule_mode == SCHEDULE_MODE_GATE and self._is_lit():
+            if self._schedule_mode == SCHEDULE_MODE_GATE_TURN_OFF and self._is_lit():
                 if self._held:
                     # Applied when the hold releases.
                     self._schedule_end_off_pending = True
@@ -4018,7 +4025,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 else:
                     self.hass.async_create_task(self._auto_lights_off())
                     self._go_idle(reason=REASON_SCHEDULE_END)
-            elif self._schedule_mode == SCHEDULE_MODE_GATE:
+            elif self._schedule_mode == SCHEDULE_MODE_GATE_TURN_OFF:
                 # Ends an on-period that going bright cut short, too.
                 self._clear_bright_forced_off()
                 self.async_write_ha_state()
@@ -4311,7 +4318,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         if stands and (
             self._auto_on_brightness is not None
             or self._auto_on_color
-            or self._turn_on_select_entity
+            or self._turn_on_selection_entity
         ):
             self.hass.async_create_task(self._auto_lights_on(force_selection=True))
 
@@ -4464,7 +4471,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         """
         checks = [(self._illuminance_sensor, ("off", STATE_UNAVAILABLE))]
         if self._schedule_mode in (
-            SCHEDULE_MODE_GATE,
+            SCHEDULE_MODE_GATE_TURN_OFF,
             SCHEDULE_MODE_GATE_SWITCH,
             SCHEDULE_MODE_GATE_KEEP,
         ):
@@ -5070,11 +5077,11 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
     def _selection_to_apply(self) -> str | None:
         """Return the selection option a turn-on is about to apply."""
-        if not self._turn_on_select_entity or (
+        if not self._turn_on_selection_entity or (
             self._attr_is_on and not self._all_lights_off()
         ):
             return None
-        select_state = self.hass.states.get(self._turn_on_select_entity)
+        select_state = self.hass.states.get(self._turn_on_selection_entity)
         if select_state is None or select_state.state == STATE_UNAVAILABLE:
             return None
         return self._resolve_turn_on_selection()[0]
@@ -5715,7 +5722,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     async def _apply_turn_on_selection(self, context: Context) -> None:
         """Apply the configured select option before a turn-on or a re-send."""
         # The settings may name another select entity by the time it answers.
-        select_entity = self._turn_on_select_entity
+        select_entity = self._turn_on_selection_entity
         if not select_entity:
             return
         select_state = self.hass.states.get(select_entity)
@@ -5733,13 +5740,13 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         option, source = self._resolve_turn_on_selection()
         if option is None:
             parts = []
-            if self._turn_on_select_source_entity:
+            if self._turn_on_selection_source_entity:
                 parts.append(
-                    f"the option source entity {self._turn_on_select_source_entity}"
+                    f"the option source entity {self._turn_on_selection_source_entity}"
                 )
-            if self._turn_on_select_option:
+            if self._turn_on_selection_option:
                 parts.append(
-                    f"the fixed/fallback option {self._turn_on_select_option!r}"
+                    f"the fixed/fallback option {self._turn_on_selection_option!r}"
                 )
             _LOGGER.log(
                 self._selection_log_level(select_entity, "unresolved"),
@@ -5797,20 +5804,20 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     def _resolve_turn_on_selection(self) -> tuple[str | None, str | None]:
         """Resolve the option source entity's state, else the fixed/fallback option."""
         candidates: list[tuple[str, str]] = []
-        if self._turn_on_select_source_entity:
-            source_state = self.hass.states.get(self._turn_on_select_source_entity)
+        if self._turn_on_selection_source_entity:
+            source_state = self.hass.states.get(self._turn_on_selection_source_entity)
             if source_state is not None and source_state.state not in (
                 STATE_UNAVAILABLE,
                 STATE_UNKNOWN,
                 "",
             ):
                 candidates.append(
-                    (source_state.state, self._turn_on_select_source_entity)
+                    (source_state.state, self._turn_on_selection_source_entity)
                 )
-        if self._turn_on_select_option:
-            candidates.append((self._turn_on_select_option, "fixed"))
+        if self._turn_on_selection_option:
+            candidates.append((self._turn_on_selection_option, "fixed"))
 
-        select_state = self.hass.states.get(self._turn_on_select_entity)
+        select_state = self.hass.states.get(self._turn_on_selection_entity)
         select_options = (
             select_state.attributes.get(ATTR_OPTIONS)
             if select_state is not None
@@ -5883,7 +5890,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             "bright_resume_until": _fmt(self._bright_resume_until),
         }
         end_off = self._schedule_end_off_pending or bool(owed and owed.end_off)
-        if self._schedule_mode == SCHEDULE_MODE_GATE and self._schedule_sensor:
+        if self._schedule_mode == SCHEDULE_MODE_GATE_TURN_OFF and self._schedule_sensor:
             attributes[ATTR_SCHEDULE_END_OFF_PENDING] = end_off
         if self._is_scheduled_light:
             attributes[ATTR_ACTIVE_SETTINGS] = (

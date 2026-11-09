@@ -25,14 +25,14 @@ from custom_components.molight.const import (
     CONF_OCCUPANCY_SENSOR,
     CONF_STANDBY_BRIGHTNESS,
     CONF_TURN_OFF_TIMEOUT,
-    CONF_TURN_ON_SELECT_ENTITY,
-    CONF_TURN_ON_SELECT_OPTION,
+    CONF_TURN_ON_SELECTION_ENTITY,
+    CONF_TURN_ON_SELECTION_OPTION,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_DURATION,
     DOMAIN,
     SCHEDULE_MODE_FOLLOW,
-    SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_SWITCH,
+    SCHEDULE_MODE_GATE_TURN_OFF,
 )
 from tests.conftest import (
     finish_startup,
@@ -68,9 +68,9 @@ def _selection_entry(
     return make_light_entry(
         name="Selection Light",
         lights=["light.ambient"],
-        turn_on_select_entity="select.ambient_theme",
-        turn_on_select_option=option,
-        turn_on_select_source_entity=source_entity,
+        turn_on_selection_entity="select.ambient_theme",
+        turn_on_selection_option=option,
+        turn_on_selection_source_entity=source_entity,
         **kwargs,
     )
 
@@ -1198,7 +1198,9 @@ async def test_switch_window_end_recalculates_a_waiting_turn_on(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-@pytest.mark.parametrize("mode", [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH])
+@pytest.mark.parametrize(
+    "mode", [SCHEDULE_MODE_GATE_TURN_OFF, SCHEDULE_MODE_GATE_SWITCH]
+)
 async def test_window_end_takes_over_a_waiting_virtual_turn_on(
     hass: HomeAssistant, mode: str
 ) -> None:
@@ -1699,8 +1701,8 @@ async def test_standby_whose_select_call_never_answers_still_comes_on(
             inside={
                 CONF_TURN_OFF_TIMEOUT: 60,
                 CONF_STANDBY_BRIGHTNESS: 20,
-                CONF_TURN_ON_SELECT_ENTITY: "select.ambient_theme",
-                CONF_TURN_ON_SELECT_OPTION: "Cozy",
+                CONF_TURN_ON_SELECTION_ENTITY: "select.ambient_theme",
+                CONF_TURN_ON_SELECTION_OPTION: "Cozy",
             },
         ),
     )
@@ -2080,8 +2082,8 @@ async def test_members_reporting_in_off_after_the_turn_on_get_it_again(
             lights=members,
             occupancy="binary_sensor.occ",
             auto_on_brightness=40,
-            turn_on_select_entity="select.ambient_theme",
-            turn_on_select_option="Cozy",
+            turn_on_selection_entity="select.ambient_theme",
+            turn_on_selection_option="Cozy",
         ),
     )
     if trigger == "virtual":
@@ -2340,8 +2342,8 @@ async def test_physical_turn_on_of_another_member_during_a_select_on_device_over
         make_light_entry(
             name="Selection Light",
             lights=["light.ambient", "light.lamp"],
-            turn_on_select_entity="select.ambient_theme",
-            turn_on_select_option="Cozy",
+            turn_on_selection_entity="select.ambient_theme",
+            turn_on_selection_option="Cozy",
             occupancy="binary_sensor.occ",
             auto_on_brightness=40,
         ),
@@ -2459,13 +2461,13 @@ async def test_physical_turn_on_on_the_select_device_with_no_call_running_is_cla
 _SCHEDULE = "binary_sensor.settings_schedule"
 _PRESET = {
     CONF_TURN_OFF_TIMEOUT: 60,
-    CONF_TURN_ON_SELECT_ENTITY: "select.ambient_theme",
-    CONF_TURN_ON_SELECT_OPTION: "Cozy",
+    CONF_TURN_ON_SELECTION_ENTITY: "select.ambient_theme",
+    CONF_TURN_ON_SELECTION_OPTION: "Cozy",
 }
 _OTHER_SELECT = {
     CONF_TURN_OFF_TIMEOUT: 60,
-    CONF_TURN_ON_SELECT_ENTITY: "select.other_theme",
-    CONF_TURN_ON_SELECT_OPTION: "Cozy",
+    CONF_TURN_ON_SELECTION_ENTITY: "select.other_theme",
+    CONF_TURN_ON_SELECTION_OPTION: "Cozy",
 }
 _OTHER_SETTINGS = {
     "no_selection": {CONF_TURN_OFF_TIMEOUT: 60},
@@ -3269,8 +3271,8 @@ async def _lit_pair(
     entry = make_light_entry(
         name="Selection Light",
         lights=["light.ambient", "light.other"],
-        turn_on_select_entity="select.ambient_theme",
-        turn_on_select_option="Cozy",
+        turn_on_selection_entity="select.ambient_theme",
+        turn_on_selection_option="Cozy",
         **kwargs,
     )
     await setup_entries(hass, entry)

@@ -21,7 +21,7 @@ from custom_components.molight.const import (
     DOOR_MODE_OPEN_CLOSE,
     ILLUMINANCE_MODE_CONTROL,
     SCHEDULE_MODE_FOLLOW,
-    SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_TURN_OFF,
     STATE_ACTIVE,
     STATE_EFFECT,
     STATE_IDLE,
@@ -338,7 +338,7 @@ async def test_gate_window_end_during_warn_forces_off(
 ) -> None:
     entry = make_light_entry(
         schedule=SCHED,
-        schedule_mode=SCHEDULE_MODE_GATE,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
         warn_duration=30,
         warn_brightness=100,
     )

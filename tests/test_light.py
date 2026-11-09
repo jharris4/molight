@@ -25,6 +25,7 @@ from custom_components.molight.const import (
     CONF_LIGHTS,
     CONF_NAME,
     CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_SCHEDULE_MODE,
     CONF_SCHEDULE_SENSOR,
@@ -38,7 +39,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_SCHEDULE,
     ILLUMINANCE_MODE_GATE_ONLY,
     SCHEDULE_MODE_FOLLOW,
-    SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_TURN_OFF,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
     STATE_EFFECT,
@@ -786,7 +787,7 @@ def _fd_occupancy_entry() -> MockConfigEntry:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "FD Occupancy",
-            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_SOURCE: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_FALSE_DETECTION_GRACE: 3,
         },
@@ -1304,7 +1305,7 @@ async def test_gate_mode_blocks_occupancy_outside_window(
             CONF_TURN_OFF_TIMEOUT: 60,
             CONF_OCCUPANCY_SENSOR: "binary_sensor.test_occupancy",
             CONF_SCHEDULE_SENSOR: "binary_sensor.night_schedule",
-            CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
+            CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE_TURN_OFF,
         },
     )
     await _setup_entries(

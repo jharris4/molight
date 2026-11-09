@@ -21,21 +21,25 @@ from .const import (
     CONF_ENTITY_TYPE,
     CONF_ILLUMINANCE_MODE,
     CONF_ILLUMINANCE_SENSOR,
+    CONF_ILLUMINANCE_SOURCE,
     CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_KEEP_ON_ENTITIES,
     CONF_LIGHTS,
     CONF_MAINTAIN_OCCUPANCY_SENSOR,
     CONF_MAINTAIN_SENSORS,
     CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_SCHEDULE_INPUTS,
+    CONF_SCHEDULE_MODE,
     CONF_SCHEDULE_SENSOR,
     CONF_SCHEDULE_SOURCE,
     CONF_TARGET_LIGHTS,
     CONF_TRIGGER_SENSORS,
     CONF_TURN_OFF_TIMEOUT,
-    CONF_TURN_ON_SELECT_ENTITY,
-    CONF_TURN_ON_SELECT_SOURCE_ENTITY,
+    CONF_TURN_ON_SELECTION_ENTITY,
+    CONF_TURN_ON_SELECTION_OPTION,
+    CONF_TURN_ON_SELECTION_SOURCE_ENTITY,
     CONF_WARN_DURATION,
     CONFIG_ENTRY_VERSION,
     DATA_AUTO_OFF_ENABLED,
@@ -45,11 +49,14 @@ from .const import (
     DATA_REMOVED,
     DATA_SCHEDULE_WATCH,
     DOMAIN,
+    ENTITY_TYPE_ILLUMINANCE,
+    ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_REMOTE,
     ILLUMINANCE_MODE_GATE_ONLY,
     PLATFORMS,
     PLATFORMS_BY_ENTITY_TYPE,
     REMOTE_ACTION_FIELDS,
+    SCHEDULE_MODE_GATE_TURN_OFF,
 )
 from .helpers import VIRTUAL_LIGHT_TYPES, entry_settings
 from .issues import (
@@ -98,8 +105,10 @@ _REFERENCE_LIST_KEYS = (
 # entities MoLight does not create, so a removed entry cannot leave them.
 _ENTITY_ID_KEYS = (
     *_REFERENCE_KEYS,
-    CONF_TURN_ON_SELECT_ENTITY,
-    CONF_TURN_ON_SELECT_SOURCE_ENTITY,
+    CONF_OCCUPANCY_SOURCE,
+    CONF_ILLUMINANCE_SOURCE,
+    CONF_TURN_ON_SELECTION_ENTITY,
+    CONF_TURN_ON_SELECTION_SOURCE_ENTITY,
 )
 _ENTITY_ID_LIST_KEYS = (
     *_REFERENCE_LIST_KEYS,
@@ -337,8 +346,19 @@ _RENAMED_KEYS = {
     "door_entity": CONF_DOOR_SENSOR,
     "clear_on_unavailable_timeout": CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT,
     "dim_step": CONF_BRIGHTNESS_STEP,
+    "turn_on_select_entity": CONF_TURN_ON_SELECTION_ENTITY,
+    "turn_on_select_option": CONF_TURN_ON_SELECTION_OPTION,
+    "turn_on_select_source_entity": CONF_TURN_ON_SELECTION_SOURCE_ENTITY,
 }
-_RENAMED_ILLUMINANCE_MODES = {"gate": ILLUMINANCE_MODE_GATE_ONLY}
+# A sensor entry's source had the key that a light's sensor reference now has.
+_RENAMED_SOURCE_KEYS = {
+    ENTITY_TYPE_OCCUPANCY: {"occupancy_sensor": CONF_OCCUPANCY_SOURCE},
+    ENTITY_TYPE_ILLUMINANCE: {"illuminance_sensor": CONF_ILLUMINANCE_SOURCE},
+}
+_RENAMED_MODES = {
+    CONF_ILLUMINANCE_MODE: {"gate": ILLUMINANCE_MODE_GATE_ONLY},
+    CONF_SCHEDULE_MODE: {"gate": SCHEDULE_MODE_GATE_TURN_OFF},
+}
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -346,21 +366,29 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if entry.version > CONFIG_ENTRY_VERSION:
         return False  # saved by a later release, under keys unknown here
     if entry.version < CONFIG_ENTRY_VERSION:
+        keys = _RENAMED_KEYS | _RENAMED_SOURCE_KEYS.get(
+            entry.data[CONF_ENTITY_TYPE], {}
+        )
+
+        def _rename(cfg: Mapping[str, Any]) -> dict[str, Any]:
+            return _rename_settings(cfg, keys)
+
         hass.config_entries.async_update_entry(
             entry,
-            data=_in_each_settings_set(entry.data, _rename_settings),
-            options=_in_each_settings_set(entry.options, _rename_settings),
+            data=_in_each_settings_set(entry.data, _rename),
+            options=_in_each_settings_set(entry.options, _rename),
             version=CONFIG_ENTRY_VERSION,
         )
     return True
 
 
-def _rename_settings(cfg: Mapping[str, Any]) -> dict[str, Any]:
-    """Return cfg under the version-2 keys, every value copied as it is."""
-    renamed = {_RENAMED_KEYS.get(key, key): value for key, value in cfg.items()}
-    mode = renamed.get(CONF_ILLUMINANCE_MODE)
-    if mode in _RENAMED_ILLUMINANCE_MODES:
-        renamed[CONF_ILLUMINANCE_MODE] = _RENAMED_ILLUMINANCE_MODES[mode]
+def _rename_settings(cfg: Mapping[str, Any], keys: Mapping[str, str]) -> dict[str, Any]:
+    """Return cfg under the version-2 keys, every other value copied as it is."""
+    renamed = {keys.get(key, key): value for key, value in cfg.items()}
+    for key, modes in _RENAMED_MODES.items():
+        mode = renamed.get(key)
+        if isinstance(mode, str) and mode in modes:
+            renamed[key] = modes[mode]
     return renamed
 
 
@@ -482,11 +510,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
         if other.entry_id == entry.entry_id:
             continue
         cfg = entry_settings(other)
-        # The occupancy and illuminance keys also name a sensor entry's own source,
-        # which is never a virtual entity; clean them up on lights only.
-        keys = _REFERENCE_KEYS if _is_virtual_light(other) else (CONF_SCHEDULE_SOURCE,)
         cleaned = _remap_references(
-            cfg, dict.fromkeys(removed), keys, _REFERENCE_LIST_KEYS
+            cfg, dict.fromkeys(removed), _REFERENCE_KEYS, _REFERENCE_LIST_KEYS
         )
         if cleaned == cfg:
             continue

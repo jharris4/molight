@@ -198,8 +198,8 @@ async def test_turn_on_selection_is_named(hass) -> None:
         make_light_entry(
             name="Hall",
             occupancy=OCC,
-            turn_on_select_entity="select.theme",
-            turn_on_select_option="Bright",
+            turn_on_selection_entity="select.theme",
+            turn_on_selection_option="Bright",
         ),
         binary_sensor__occ="off",
     )
@@ -310,7 +310,7 @@ async def test_presence_outside_a_gate_window_is_blocked_then_lit_at_its_start(
     records = await _setup(
         hass,
         make_light_entry(
-            name="Hall", occupancy=OCC, schedule=SCHED, schedule_mode="gate"
+            name="Hall", occupancy=OCC, schedule=SCHED, schedule_mode="gate_turn_off"
         ),
         binary_sensor__occ="off",
         binary_sensor__sched="off",

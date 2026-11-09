@@ -25,8 +25,8 @@ from custom_components.molight.const import (
     DOOR_MODE_OPEN_CLOSE,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE_ONLY,
-    SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_SWITCH,
+    SCHEDULE_MODE_GATE_TURN_OFF,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
     STATE_EFFECT,
@@ -217,7 +217,7 @@ async def test_gate_window_start_adopts_active_occupancy(
             door=DOOR,
             door_mode=DOOR_MODE_OPEN_CLOSE,
             schedule=SCHED,
-            schedule_mode=SCHEDULE_MODE_GATE,
+            schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
         ),
     )
     hass.states.async_set(SCHED, "off")  # outside the window

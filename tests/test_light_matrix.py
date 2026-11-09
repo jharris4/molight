@@ -23,9 +23,9 @@ from custom_components.molight.const import (
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE_ONLY,
     SCHEDULE_MODE_FOLLOW,
-    SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
     SCHEDULE_MODE_GATE_SWITCH,
+    SCHEDULE_MODE_GATE_TURN_OFF,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
     STATE_IDLE,
@@ -109,7 +109,7 @@ async def _assert_occupancy_trigger_gating(
         occupancy=OCC,
         illuminance=ILLUM if illum else None,
         schedule=SCHED if sched else None,
-        schedule_mode=SCHEDULE_MODE_GATE if sched else None,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF if sched else None,
     )
     if illum:
         hass.states.async_set(ILLUM, "on" if illum == "bright" else "off")
@@ -182,7 +182,7 @@ async def _assert_illuminance_dark_turn_on(
         occupancy=OCC if occ else None,
         illuminance=ILLUM,
         schedule=SCHED if sched else None,
-        schedule_mode=SCHEDULE_MODE_GATE if sched else None,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF if sched else None,
     )
     hass.states.async_set(ILLUM, "on")  # bright
     if occ:
@@ -346,7 +346,10 @@ async def test_dark_edge_does_not_turn_on_after_gate_window_end(
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(SCHED, "on")
     entry = make_light_entry(
-        illuminance=ILLUM, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE, timeout=300
+        illuminance=ILLUM,
+        schedule=SCHED,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
+        timeout=300,
     )
     await setup_entries(hass, entry)
 
@@ -481,7 +484,7 @@ async def test_dark_edge_after_a_manual_off_while_bright_resumes_nothing(
 @pytest.mark.parametrize(
     ("mode", "ends"),
     [
-        (SCHEDULE_MODE_GATE, True),
+        (SCHEDULE_MODE_GATE_TURN_OFF, True),
         (SCHEDULE_MODE_GATE_SWITCH, False),
         (SCHEDULE_MODE_GATE_KEEP, False),
     ],
@@ -536,7 +539,8 @@ async def test_gate_window_end_while_bright_off_ends_the_on_period(
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize(
-    "mode", [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP]
+    "mode",
+    [SCHEDULE_MODE_GATE_TURN_OFF, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
 )
 async def test_dark_edge_outside_a_gate_window_resumes_a_bright_off(
     hass: HomeAssistant, freezer, mode: str
@@ -577,7 +581,7 @@ async def test_dark_edge_outside_a_gate_window_resumes_a_bright_off(
 @pytest.mark.parametrize(
     ("mode", "held"),
     [
-        (SCHEDULE_MODE_GATE, False),
+        (SCHEDULE_MODE_GATE_TURN_OFF, False),
         (SCHEDULE_MODE_GATE_SWITCH, True),
         (SCHEDULE_MODE_GATE_KEEP, True),
     ],
@@ -1047,7 +1051,7 @@ async def test_gate_window_start_records_the_standing_presence(
         door=DOOR,
         door_mode=DOOR_MODE_OPEN_CLOSE,
         schedule=SCHED,
-        schedule_mode=SCHEDULE_MODE_GATE,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
     )
     await setup_entries(hass, entry)
     await _turn_on_by(hass, standing)  # gated: outside the window
@@ -1233,7 +1237,8 @@ async def test_follow_attribute_change_without_new_marker_keeps_manual_off(
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize(
-    "mode", [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP]
+    "mode",
+    [SCHEDULE_MODE_GATE_TURN_OFF, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
 )
 async def test_gate_marker_change_keeps_manual_off(
     hass: HomeAssistant, mode: str
@@ -1265,7 +1270,7 @@ async def test_gate_marker_change_keeps_manual_off(
 async def test_gate_window_end_forces_off(hass: HomeAssistant, origin: str) -> None:
     """Window end turns the lights off from every running state."""
     entry = make_light_entry(
-        occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE
+        occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF
     )
     hass.states.async_set(SCHED, "on")
     await setup_entries(hass, entry)
@@ -1298,7 +1303,7 @@ async def test_gate_window_end_forces_off(hass: HomeAssistant, origin: str) -> N
 async def test_gate_window_end_noop_while_idle(hass: HomeAssistant) -> None:
     """Window end while IDLE stays IDLE."""
     entry = make_light_entry(
-        occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE
+        occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF
     )
     hass.states.async_set(SCHED, "on")
     await setup_entries(hass, entry)
@@ -1561,7 +1566,7 @@ async def test_gate_and_turn_off_light_on_outside_its_window_ignores_an_open_doo
             door_mode=DOOR_MODE_OPEN_CLOSE,
             maintain=MAINT,
             schedule=SCHED,
-            schedule_mode=SCHEDULE_MODE_GATE,
+            schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
         ),
     )
     if how == "physical":
@@ -1587,7 +1592,7 @@ async def test_gate_window_start_respects_illuminance(hass: HomeAssistant) -> No
         occupancy=OCC,
         illuminance=ILLUM,
         schedule=SCHED,
-        schedule_mode=SCHEDULE_MODE_GATE,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
     )
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(ILLUM, "on")  # bright
@@ -1617,7 +1622,7 @@ async def test_gate_window_start_turns_on_at_auto_on_brightness(
     entry = make_light_entry(
         occupancy=OCC,
         schedule=SCHED,
-        schedule_mode=SCHEDULE_MODE_GATE,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
         auto_on_brightness=40,  # 40% → 102 of 255
     )
     hass.states.async_set(SCHED, "off")
@@ -1641,7 +1646,7 @@ async def test_gate_window_start_keeps_running_state(
 ) -> None:
     """Window start while already ACTIVE leaves the state and timer untouched."""
     entry = make_light_entry(
-        occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE
+        occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF
     )
     hass.states.async_set(SCHED, "off")
     await setup_entries(hass, entry)
@@ -1684,7 +1689,7 @@ async def test_forced_off_beats_occupancy_with_all_three_configured(
         occupancy=OCC,
         illuminance=ILLUM,
         schedule=SCHED,
-        schedule_mode=SCHEDULE_MODE_GATE,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
     )
     hass.states.async_set(SCHED, "on")  # in-window
     hass.states.async_set(ILLUM, "off")  # dark
@@ -1732,7 +1737,7 @@ async def test_virtual_turn_on_not_gated_outside_schedule(
     hass: HomeAssistant, freezer
 ) -> None:
     """A person can turn a regular Virtual Light on outside its gate schedule."""
-    entry = make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE)
+    entry = make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF)
     hass.states.async_set(SCHED, "off")
     await _assert_virtual_turn_on_runs_timer(hass, freezer, entry)
 
@@ -2058,7 +2063,7 @@ async def _assert_false_blip_keeps_the_visits_timer(
             illuminance=ILLUM,
             illuminance_mode=ILLUMINANCE_MODE_GATE_ONLY,
             schedule=SCHED if lit_by == "window" else None,
-            schedule_mode=SCHEDULE_MODE_GATE if lit_by == "window" else None,
+            schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF if lit_by == "window" else None,
         ),
     )
     for sensor in sensors:

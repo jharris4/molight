@@ -14,7 +14,7 @@ from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
     CONF_LIGHTS,
     CONF_NAME,
-    CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     DATA_AUTO_OFF_ENABLED,
     DOMAIN,
@@ -39,7 +39,7 @@ def _occupancy() -> MockConfigEntry:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Hall Motion",
-            CONF_OCCUPANCY_SENSOR: PIR,
+            CONF_OCCUPANCY_SOURCE: PIR,
             CONF_OCCUPANCY_TIMEOUT: 30,
         },
     )

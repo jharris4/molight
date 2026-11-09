@@ -17,12 +17,15 @@ from custom_components.molight.const import (
     CONF_FALSE_DETECTION_GRACE,
     CONF_ILLUMINANCE_MODE,
     CONF_ILLUMINANCE_SENSOR,
+    CONF_ILLUMINANCE_SOURCE,
+    CONF_ILLUMINANCE_THRESHOLD,
     CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_KEEP_ON_ENTITIES,
     CONF_LIGHTS,
     CONF_MAINTAIN_OCCUPANCY_SENSOR,
     CONF_NAME,
     CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_SOURCE,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_ON_BUTTONS_SINGLE,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
@@ -30,16 +33,20 @@ from custom_components.molight.const import (
     CONF_SCHEDULE_SENSOR,
     CONF_TARGET_LIGHTS,
     CONF_TURN_OFF_TIMEOUT,
+    CONF_TURN_ON_SELECTION_ENTITY,
+    CONF_TURN_ON_SELECTION_OPTION,
+    CONF_TURN_ON_SELECTION_SOURCE_ENTITY,
     CONF_WARN_DURATION,
     CONFIG_ENTRY_VERSION,
     DOMAIN,
+    ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_REMOTE,
     ENTITY_TYPE_SCHEDULED_LIGHT,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE_ONLY,
-    SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_TURN_OFF,
 )
 from tests.conftest import setup_entries
 
@@ -51,9 +58,14 @@ BASE = {
     ENTITY_TYPE_SCHEDULED_LIGHT: {CONF_NAME: "Hall", CONF_LIGHTS: ["light.hall_real"]},
     ENTITY_TYPE_OCCUPANCY: {
         CONF_NAME: "Hall Occupancy",
-        CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+        "occupancy_sensor": "binary_sensor.motion_1",
         CONF_OCCUPANCY_TIMEOUT: 30,
         CONF_FALSE_DETECTION_GRACE: 0,
+    },
+    ENTITY_TYPE_ILLUMINANCE: {
+        CONF_NAME: "Hall Lux",
+        "illuminance_sensor": "sensor.lux_1",
+        CONF_ILLUMINANCE_THRESHOLD: 10.0,
     },
     ENTITY_TYPE_REMOTE: {
         CONF_NAME: "Hall Remote",
@@ -95,6 +107,32 @@ RENAMED = [
         30,
     ),
     (ENTITY_TYPE_REMOTE, "dim_step", CONF_BRIGHTNESS_STEP, 20),
+    (
+        ENTITY_TYPE_LIGHT,
+        "turn_on_select_entity",
+        CONF_TURN_ON_SELECTION_ENTITY,
+        "select.mode",
+    ),
+    (ENTITY_TYPE_LIGHT, "turn_on_select_option", CONF_TURN_ON_SELECTION_OPTION, "Dim"),
+    (
+        ENTITY_TYPE_LIGHT,
+        "turn_on_select_source_entity",
+        CONF_TURN_ON_SELECTION_SOURCE_ENTITY,
+        "input_select.mode",
+    ),
+    # A sensor entry's source, under the key a light's reference has in version 2.
+    (
+        ENTITY_TYPE_OCCUPANCY,
+        "occupancy_sensor",
+        CONF_OCCUPANCY_SOURCE,
+        "binary_sensor.motion_2",
+    ),
+    (
+        ENTITY_TYPE_ILLUMINANCE,
+        "illuminance_sensor",
+        CONF_ILLUMINANCE_SOURCE,
+        "sensor.lux_2",
+    ),
 ]
 
 
@@ -165,8 +203,8 @@ async def test_illuminance_mode_gate_becomes_gate_only(hass: HomeAssistant) -> N
 
 
 @pytest.mark.asyncio
-async def test_schedule_mode_gate_is_kept(hass: HomeAssistant) -> None:
-    """Only the illuminance mode's gate is renamed; the schedule mode's stays."""
+async def test_schedule_mode_gate_becomes_gate_turn_off(hass: HomeAssistant) -> None:
+    """Each mode's gate gets its own new value."""
     entry = _entry(
         ENTITY_TYPE_LIGHT,
         {
@@ -181,7 +219,7 @@ async def test_schedule_mode_gate_is_kept(hass: HomeAssistant) -> None:
     await setup_entries(hass, entry)
 
     for saved in (entry.data, entry.options):
-        assert saved[CONF_SCHEDULE_MODE] == SCHEDULE_MODE_GATE
+        assert saved[CONF_SCHEDULE_MODE] == SCHEDULE_MODE_GATE_TURN_OFF
         assert saved[CONF_ILLUMINANCE_MODE] == ILLUMINANCE_MODE_GATE_ONLY
 
 

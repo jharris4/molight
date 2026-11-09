@@ -30,7 +30,7 @@ from custom_components.molight.const import (
     DOOR_MODE_OPEN_CLOSE,
     ILLUMINANCE_MODE_GATE_ONLY,
     SCHEDULE_MODE_FOLLOW,
-    SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_TURN_OFF,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
     STATE_EFFECT,
@@ -221,7 +221,7 @@ async def _assert_door_open_gating(
         door_mode=DOOR_MODE_OPEN,
         illuminance=ILLUM if illum else None,
         schedule=SCHED if sched else None,
-        schedule_mode=SCHEDULE_MODE_GATE if sched else None,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF if sched else None,
     )
     if illum:
         hass.states.async_set(ILLUM, "on" if illum == "bright" else "off")
@@ -452,7 +452,7 @@ async def test_gate_window_start_rechecks_open_door(
         door=DOOR,
         door_mode=door_mode,
         schedule=SCHED,
-        schedule_mode=SCHEDULE_MODE_GATE,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
     )
     hass.states.async_set(SCHED, "off")
     await setup_entries(hass, entry)
@@ -492,7 +492,7 @@ async def test_gate_schedule_briefly_unavailable_keeps_the_doors_part(
             door_mode=DOOR_MODE_OPEN_CLOSE,
             maintain=MAINT,
             schedule=SCHED,
-            schedule_mode=SCHEDULE_MODE_GATE,
+            schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
         ),
     )
     hass.states.async_set(DOOR, OPEN)
@@ -718,7 +718,7 @@ async def test_dead_door_does_not_light_the_room_at_a_gate_window_start(
         door=DOOR,
         door_mode=DOOR_MODE_OPEN_CLOSE,
         schedule=SCHED,
-        schedule_mode=SCHEDULE_MODE_GATE,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
     )
     await setup_entries(hass, entry)
     hass.states.async_set(DOOR, OPEN)  # schedule-gated
@@ -885,7 +885,7 @@ async def test_open_close_seed_outside_gate_window_ignores_open_door(
         door=DOOR,
         door_mode=DOOR_MODE_OPEN_CLOSE,
         schedule=SCHED,
-        schedule_mode=SCHEDULE_MODE_GATE,
+        schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
     )
     hass.states.async_set(REAL, "off")
     hass.states.async_set(DOOR, OPEN)
@@ -1143,7 +1143,7 @@ async def test_open_close_close_ignores_gated_occupancy(
             door_mode=DOOR_MODE_OPEN_CLOSE,
             occupancy=OCC,
             schedule=SCHED,
-            schedule_mode=SCHEDULE_MODE_GATE,
+            schedule_mode=SCHEDULE_MODE_GATE_TURN_OFF,
             timeout=10,
         )
         hass.states.async_set(SCHED, "off")
