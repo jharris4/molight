@@ -30,6 +30,7 @@ from custom_components.molight.const import (
     CONF_SCHEDULE_MODE,
     CONF_SCHEDULE_SENSOR,
     CONF_TRIGGER_SENSORS,
+    CONF_TURN_OFF_TIMEOUT,
     DOMAIN,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
     ENTITY_TYPE_OCCUPANCY,
@@ -40,6 +41,9 @@ from custom_components.molight.const import (
     MATCH_SCHEDULE_AFTER_RESTART_INSIDE_AND_OUTSIDE,
     MATCH_SCHEDULE_AFTER_RESTART_OUTSIDE,
     REASON_STARTUP,
+    SCHEDULE_END_ACTION_KEEP,
+    SCHEDULE_END_ACTION_SWITCH,
+    SCHEDULE_END_ACTION_TURN_OFF,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
@@ -56,6 +60,7 @@ from tests.conftest import (
     finish_startup,
     light_targets,
     make_light_entry,
+    make_scheduled_light_entry,
     record_service_calls,
     restart_entries,
     settle,
@@ -1267,6 +1272,87 @@ async def test_real_restart_after_a_manual_on_outside_the_window(
     assert _state(hass).attributes["molight_state"] == (
         STATE_IDLE if off else STATE_ACTIVE
     )
+
+
+_GATE_MODES = (SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP)
+_OFF_AT_END = (SCHEDULE_MODE_FOLLOW, SCHEDULE_MODE_GATE, SCHEDULE_END_ACTION_TURN_OFF)
+
+
+def _setup_entry(setup: str) -> MockConfigEntry:
+    if setup in (SCHEDULE_MODE_FOLLOW, *_GATE_MODES):
+        return make_light_entry(occupancy=OCC, schedule=SCHED, schedule_mode=setup)
+    return make_scheduled_light_entry(
+        name="Matrix Light",
+        schedule=SCHED,
+        schedule_end_action=setup,
+        inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_OCCUPANCY_SENSOR: OCC},
+    )
+
+
+async def _echo(hass: HomeAssistant) -> None:
+    """Have the member report what the virtual light last commanded."""
+    hass.states.async_set(REAL, _state(hass).state)
+    await settle(hass)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("member", ["readable", "missing", "placeholder"])
+@pytest.mark.parametrize(
+    "setup",
+    [
+        SCHEDULE_MODE_FOLLOW,
+        *_GATE_MODES,
+        SCHEDULE_END_ACTION_TURN_OFF,
+        SCHEDULE_END_ACTION_SWITCH,
+        SCHEDULE_END_ACTION_KEEP,
+    ],
+)
+async def test_real_restart_keeps_a_manual_on_made_after_a_window_ended(
+    hass: HomeAssistant, setup: str, member: str
+) -> None:
+    """The end of a schedule window that lit the light is not applied again at a
+    restart after a manual turn-on, also to a member that loads late."""
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(REAL, "off")
+    entry = _setup_entry(setup)
+    await setup_entries(hass, entry)
+    await settle(hass)
+
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await settle(hass)
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    await _echo(hass)
+    assert _state(hass).state == "on"
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    hass.states.async_set(SCHED, "off")
+    await settle(hass)
+    await _echo(hass)
+    assert _state(hass).state == ("off" if setup in _OFF_AT_END else "on")
+
+    await _turn(hass, True)
+    await _echo(hass)
+    assert _state(hass).state == "on"
+
+    await restart_entries(hass, entry, started=False)
+    if member == "missing":
+        hass.states.async_remove(REAL)
+    elif member == "placeholder":
+        hass.states.async_set(REAL, "unavailable", {"restored": True})
+    calls = record_service_calls(hass)
+    await finish_startup(hass)
+    await settle(hass)
+    if member != "readable":
+        hass.states.async_set(REAL, "on")
+        await settle(hass)
+
+    assert light_targets(calls, "turn_off") == []
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
 
 
 @pytest.mark.asyncio
