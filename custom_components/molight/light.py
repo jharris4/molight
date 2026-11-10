@@ -2114,6 +2114,20 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         self._restored_on = False
         self._send_event(EVENT_TURNED_OFF, reason=REASON_STARTUP, standby=False)
 
+    def _start_found_on_period(self) -> None:
+        """Tell consumers that an on-period started while Home Assistant was down.
+
+        The lights were found on, with no on-period running before the restart.
+        """
+        self._send_event(
+            EVENT_TURNED_ON,
+            reason=REASON_STARTUP,
+            standby=False,
+            brightness=self._first_on_member_brightness(),
+            color=_color_data(self._first_on_member_color()),
+            selection=None,
+        )
+
     def _adopt_members(self, *, commanded: bool) -> None:
         """Seed from the members that can be read; the others count as off."""
         # Brightness 0 counts as off, matching _all_lights_off.
@@ -2141,6 +2155,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self._restored_on = False  # lit, or commanded, since the restart
         elif self._restored_on and not self._unreadable_members():
             self._end_restored_on_period()
+        elif self._attr_is_on and self._early_command is None:
+            self._start_found_on_period()
 
         if self._schedule_end_off_pending:
             if not self._attr_is_on:
@@ -2700,7 +2716,10 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             # would have adopted it: nobody is known to have turned it on.
             startup_sighting = member_recovered and not member_rebooted
             if startup_sighting and lit:
-                self._restored_on = False
+                if self._restored_on:
+                    self._restored_on = False
+                elif not self._attr_is_on:
+                    self._start_found_on_period()
             self._on_light_state_change(
                 new_state.state,
                 new_state.attributes.get("brightness"),
@@ -4121,12 +4140,16 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 self._go_idle(reason=REASON_SCHEDULE_END)
             return True
         self._schedule_window_applied = sched.attributes.get("current_window_start")
+        # An off light is turned on to match the schedule: a new on-period.
+        reason = None if self._is_lit() else REASON_SCHEDULE_START
         self._machine_state = STATE_SCHEDULED
         self._cancel_timer()
         self._forget_warning()
         # The member may already be on (booted lit): re-send the settings and
         # the turn-on selection regardless.
-        self.hass.async_create_task(self._auto_lights_on(force_selection=True))
+        self.hass.async_create_task(
+            self._auto_lights_on(force_selection=True, reason=reason)
+        )
         self.async_write_ha_state()
         return True
 

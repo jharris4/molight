@@ -2,8 +2,8 @@
 
 It fires once per on-period start, and when a light at standby is raised,
 with the reason, the look MoLight commanded and the turn-on selection it
-applied. A re-send, a member back from unavailable and a restart that
-re-applies a look fire nothing.
+applied. A re-send, a member back from unavailable while the light is on and a
+restart that re-applies a look fire nothing.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from custom_components.molight.const import (
     EVENT_TURNED_OFF,
     EVENT_TURNED_ON,
     ILLUMINANCE_MODE_CONTROL,
+    MATCH_SCHEDULE_AFTER_RESTART_OUTSIDE,
     REASON_BRIGHT,
     REASON_DOOR,
     REASON_ILLUMINANCE,
@@ -433,6 +434,120 @@ async def test_a_restart_with_the_lights_on_fires_nothing(hass) -> None:
     assert after.state == before.state
     assert after.attributes["event_type"] == EVENT_TURNED_ON
     assert after.attributes["reason"] == REASON_VIRTUAL
+
+
+@pytest.mark.asyncio
+async def test_a_restart_finding_the_lights_on_starts_an_on_period(hass) -> None:
+    """A light switched on while Home Assistant was down is found on at the
+    restart: an on-period started, with what the real light reports."""
+    entry = make_light_entry(name="Hall", timeout=60)
+    records = await _setup(hass, entry)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await settle(hass)
+    hass.states.async_set(REAL, "on", {"brightness": 120})
+    await settle(hass)
+
+    await restart_entries(hass, entry)
+
+    assert hass.states.get(VIRTUAL).state == "on"
+    assert records == [_turned_on(REASON_STARTUP, brightness=120)]
+
+
+@pytest.mark.asyncio
+async def test_a_new_light_finding_the_lights_on_starts_an_on_period(hass) -> None:
+    """A light created with its real lights on has an on-period too."""
+    hass.states.async_set(REAL, "on", {"brightness": 120})
+    await setup_entries(hass, make_light_entry(name="Hall", timeout=60))
+    await settle(hass)
+
+    attributes = hass.states.get(EVENTS).attributes
+    assert attributes["event_type"] == EVENT_TURNED_ON
+    assert attributes["reason"] == REASON_STARTUP
+    assert attributes["brightness"] == 120
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_member_found_on_after_a_restart_starts_an_on_period(
+    hass,
+) -> None:
+    """A member unreadable at the restart of a light that was off proves
+    nothing yet: its first report on starts the on-period."""
+    entry = make_light_entry(name="Hall", timeout=60)
+    records = await _setup(hass, entry)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await settle(hass)
+    hass.states.async_set(REAL, "unavailable", {"restored": True})
+    await settle(hass)
+    await restart_entries(hass, entry)
+    assert records == []
+
+    hass.states.async_set(REAL, "on", {"brightness": 120})
+    await settle(hass)
+
+    assert hass.states.get(VIRTUAL).state == "on"
+    assert records == [_turned_on(REASON_STARTUP, brightness=120)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_a_restart_turning_off_a_light_found_on_fires_both(hass) -> None:
+    """A follow-mode light found on outside its window, which the restart
+    turns off to match the schedule, had an on-period: it starts, then ends."""
+    entry = make_light_entry(
+        name="Hall",
+        schedule=SCHED,
+        schedule_mode=SCHEDULE_MODE_FOLLOW,
+        match_schedule_after_restart=MATCH_SCHEDULE_AFTER_RESTART_OUTSIDE,
+    )
+    records = await _setup(hass, entry, binary_sensor__sched="off")
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await settle(hass)
+    hass.states.async_set(REAL, "on", {"brightness": 120})
+    await settle(hass)
+
+    await restart_entries(hass, entry)
+
+    assert records == [
+        _turned_on(REASON_STARTUP, brightness=120),
+        {"event_type": EVENT_TURNED_OFF, "reason": REASON_STARTUP, "standby": False},
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("turned_off", [True, False])
+async def test_a_member_back_from_unavailable_inside_a_follow_window(
+    hass, turned_off: bool
+) -> None:
+    """A light turned off inside its follow window is turned on again when a
+    member comes back from unavailable: a new on-period. A light still on
+    continues its on-period."""
+    records = await _setup(
+        hass,
+        make_light_entry(
+            name="Hall", schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW
+        ),
+        binary_sensor__sched="off",
+    )
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await settle(hass)
+    hass.states.async_set(REAL, "on", {"brightness": 255})
+    await settle(hass)
+    if turned_off:
+        await hass.services.async_call(
+            "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+        )
+        hass.states.async_set(REAL, "off")
+        await settle(hass)
+    del records[:]
+
+    hass.states.async_set(REAL, "unavailable")
+    await settle(hass)
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+
+    assert hass.states.get(VIRTUAL).state == "on"
+    assert records == ([_turned_on(REASON_SCHEDULE_START)] if turned_off else [])
 
 
 @pytest.mark.asyncio
