@@ -361,7 +361,7 @@ LIGHT_EVENT_TYPES = [
 EVENT_FALSE_DETECTION = "false_detection"
 OCCUPANCY_EVENT_TYPES = [EVENT_FALSE_DETECTION]
 
-# The `reason` of a turned_on, turned_off or turn_on_blocked event.
+# The `reason` of a turned_on, turned_off, turn_on_blocked or adjusted event.
 REASON_VIRTUAL = "virtual"  # through the virtual light entity
 REASON_PHYSICAL = "physical"  # a real light changed by something other than MoLight
 REASON_WRAPPED = "wrapped"  # a wrapped virtual light acting by itself
@@ -369,10 +369,11 @@ REASON_REJECTED = "rejected"  # a real light's integration rejected the turn-on
 REASON_GONE = "gone"  # the only lit real light was deleted or disabled
 REASON_OCCUPANCY = "occupancy"
 REASON_DOOR = "door"
-REASON_ILLUMINANCE = "illuminance"  # going dark with presence
+REASON_ILLUMINANCE = "illuminance"  # going dark turned the light on
 REASON_RESUME = "resume"  # going dark resumed an on-period that going bright cut short
 REASON_SCHEDULE_START = "schedule_start"
-REASON_STARTUP = "startup"  # a restart found a light off that should be at standby
+# A restart found the lights on or off, or turned them on or off.
+REASON_STARTUP = "startup"
 REASON_TIMER = "timer"
 REASON_FALSE_DETECTION = "false_detection"
 REASON_BRIGHT = "bright"
