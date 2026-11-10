@@ -1891,6 +1891,24 @@
       "reference_removed": "{entity_id} was deleted while this form was open, so nothing was saved. Open Configure again."
     }
   },
+  "entity": {
+    "event": {
+      "events": {
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "adjusted": "Adjusted",
+              "false_detection": "False detection",
+              "off_warning": "Off warning",
+              "turn_on_blocked": "Turn-on blocked",
+              "turned_off": "Turned off",
+              "turned_on": "Turned on"
+            }
+          }
+        }
+      }
+    }
+  },
   "issues": {
     "combined_schedule_cycle": {
       "title": "{entity} includes itself",

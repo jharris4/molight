@@ -68,6 +68,7 @@ class MoLightEvents(EventEntity, EntityIdFollowingRestoreEntity):
     """Records the last thing a virtual light or occupancy sensor did."""
 
     _attr_should_poll = False
+    _attr_translation_key = "events"
 
     def __init__(self, entry: ConfigEntry, event_types: list[str]) -> None:
         """Initialize the Events entity."""

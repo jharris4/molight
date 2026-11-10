@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.translation import async_get_translations
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.molight.const import (
@@ -88,6 +89,20 @@ async def test_events_entity_is_created_with_its_owner_types(
     assert state.attributes["friendly_name"] == "Hall Events"
     assert state.attributes["event_types"] == event_types
     assert state.attributes["event_type"] is None
+
+
+@pytest.mark.asyncio
+async def test_every_event_type_has_a_translated_name(hass) -> None:
+    """The automation editor lists each event type by name, not by its key."""
+    await setup_entries(hass, make_light_entry(name="Hall"))
+    registry = er.async_get(hass)
+    key = registry.async_get("event.hall_events").translation_key
+
+    names = await async_get_translations(hass, "en", "entity", [DOMAIN])
+
+    prefix = f"component.{DOMAIN}.entity.event.{key}.state_attributes.event_type.state"
+    for event_type in LIGHT_EVENT_TYPES + OCCUPANCY_EVENT_TYPES:
+        assert f"{prefix}.{event_type}" in names
 
 
 @pytest.mark.asyncio
