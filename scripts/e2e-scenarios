@@ -40,6 +40,8 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+pull_images homeassistant runner
+
 echo "Starting isolated Home Assistant for behavior scenario shard $SHARD..."
 compose up --detach homeassistant
 

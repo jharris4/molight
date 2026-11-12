@@ -39,6 +39,8 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+pull_images homeassistant runner
+
 # Phases that no restart separates share one runner container.
 echo "Starting isolated Home Assistant ($MOLIGHT_E2E_HA_IMAGE)..."
 compose up --detach homeassistant

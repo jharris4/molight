@@ -18,6 +18,19 @@ export MOLIGHT_E2E_HA_IMAGE="${MOLIGHT_E2E_HA_IMAGE:-ghcr.io/home-assistant/home
 
 export MOLIGHT_E2E_RUNNER_IMAGE=python:3.14-slim
 
+# Pull the named services' missing images, retrying so a dropped registry
+# connection does not fail the run. Needs the calling script's compose().
+pull_images() {
+    local attempt
+    for attempt in 1 2 3; do
+        compose pull --quiet --policy missing "$@" && return
+        [ "$attempt" -lt 3 ] || break
+        echo "Image pull failed (attempt $attempt of 3); retrying in $((attempt * 10)) s..."
+        sleep $((attempt * 10))
+    done
+    return 1
+}
+
 # Delete directories the containers wrote to. Docker on a Linux host leaves
 # their files owned by root, so what rm cannot delete goes through a container.
 remove_dirs() {
