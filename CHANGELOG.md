@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-19
+
 ### Upgrade notes
 
 - **Back up before upgrading.** A migrated entry does not load on 1.9.x, so
@@ -424,7 +426,8 @@ Initial release.
   with startup-specific handling for lights, occupancy and illuminance.
 - HACS and hassfest validation, CI, and a brand icon.
 
-[Unreleased]: https://github.com/jharris4/molight/compare/v1.9.1...HEAD
+[Unreleased]: https://github.com/jharris4/molight/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/jharris4/molight/compare/v1.9.1...v2.0.0
 [1.9.1]: https://github.com/jharris4/molight/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/jharris4/molight/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/jharris4/molight/compare/v1.7.0...v1.8.0
