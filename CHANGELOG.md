@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- **Back up before upgrading.** A migrated entry does not load on 1.9.x, so
+  going back to 1.9.x needs a Home Assistant backup taken before the upgrade.
+
 ### Added
 
 - **Garage door openers and gates as the door sensor**: a door, garage or gate
@@ -38,8 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Settings keys renamed** after their field labels, such as `turn_off_timeout`
-  and `keep_on_entities`; every entry is migrated when it loads. A migrated
-  entry does not load on 1.9.x.
+  and `keep_on_entities`; every entry is migrated when it loads (see Upgrade
+  notes).
 
 ### Deprecated
 
