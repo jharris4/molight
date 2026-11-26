@@ -106,14 +106,18 @@ _ts_counter = itertools.count()
 
 
 def _fire(
-    hass: HomeAssistant, entity_id: str, event_type: str, event_types: list[str]
+    hass: HomeAssistant,
+    entity_id: str,
+    event_type: str,
+    event_types: list[str],
+    **attributes: str | int,
 ) -> None:
     """Write a new button event onto an event entity's state."""
     n = next(_ts_counter)
     hass.states.async_set(
         entity_id,
         f"2026-07-27T10:{n // 60:02d}:{n % 60:02d}+00:00",
-        {"event_type": event_type, "event_types": event_types},
+        {"event_type": event_type, "event_types": event_types, **attributes},
     )
 
 
@@ -1711,12 +1715,17 @@ async def test_double_click_binding_allowed_when_capable_or_unknown(
         ("single", ["single_press"], None),
         ("single", ["btn_down", "btn_up", "single_push", "double_push"], None),
         ("single", ["KeyPressed", "KeyReleased"], None),
+        ("single", ["press_end", "long_press_start", "long_press_end"], None),
+        ("single", ["long_press_start", "long_press_end"], "single_click_unsupported"),
         ("single", None, None),
         ("double", ["single_press"], "double_click_unsupported"),
         ("double", ["single_press", "double_press", "long_press"], None),
         ("double", ["press", "double_press", "long_press"], None),
         ("double", ["btn_down", "btn_up", "single_push", "double_push"], None),
         ("double", ["KeyPressed", "KeyPressed2x"], None),
+        ("double", ["single_press", "multi_press"], None),
+        ("double", ["press_start", "press_end"], "double_click_unsupported"),
+        ("double", ["press_end", "multi_press_end"], "double_click_unsupported"),
         ("double", None, None),
     ],
 )
@@ -2061,8 +2070,8 @@ NATIVE_EVENT_TYPES = {
         ["press_end"],
     ),
     "lutron_caseta_keypad": (["press_start"], "press_start", None, []),
-    # event: every ButtonEventType member; only press_start fires a binding.
-    "button_event_type": (
+    # event: every ButtonEventType member before 2026.12.
+    "button_event_type_2026_11": (
         [
             "press_start",
             "press_end",
@@ -2080,6 +2089,76 @@ NATIVE_EVENT_TYPES = {
             "multi_press_ongoing",
             "multi_press_end",
         ],
+    ),
+    # event: every ButtonEventType member from 2026.12.
+    "button_event_type": (
+        [
+            "press_start",
+            "press_end",
+            "long_press_start",
+            "long_press_end",
+            "single_press",
+            "multi_press",
+            "multi_press_ongoing",
+            "multi_press_end",
+        ],
+        "single_press",
+        "multi_press",
+        [
+            "press_start",
+            "press_end",
+            "long_press_start",
+            "long_press_end",
+            "multi_press_ongoing",
+            "multi_press_end",
+        ],
+    ),
+    # zha from 2026.12: the shapes zha-quirks 2.5.0 gives its remotes.
+    "zha_single_multi": (
+        ["single_press", "multi_press"],
+        "single_press",
+        "multi_press",
+        [],
+    ),
+    "zha_single_multi_long": (
+        ["single_press", "multi_press", "long_press_start", "long_press_end"],
+        "single_press",
+        "multi_press",
+        ["long_press_start", "long_press_end"],
+    ),
+    "zha_single": (["single_press"], "single_press", None, []),
+    "zha_press_end": (["press_end"], "press_end", None, []),
+    "zha_press_end_long": (
+        ["press_end", "long_press_start", "long_press_end"],
+        "press_end",
+        None,
+        ["long_press_start", "long_press_end"],
+    ),
+    "zha_press_start_long": (
+        ["press_start", "long_press_start"],
+        "press_start",
+        None,
+        ["long_press_start"],
+    ),
+    "zha_press_start_end_long": (
+        ["press_start", "press_end", "long_press_start", "long_press_end"],
+        "press_start",
+        None,
+        ["press_end", "long_press_start", "long_press_end"],
+    ),
+    # bosch_shc from 2026.12: a universal switch key.
+    "bosch_shc": (
+        ["single_press", "long_press_start", "long_press_end"],
+        "single_press",
+        None,
+        ["long_press_start", "long_press_end"],
+    ),
+    # opendisplay from 2026.12: the standard types beside its deprecated ones.
+    "opendisplay": (
+        ["press_start", "press_end", "button_down", "button_up"],
+        "press_start",
+        None,
+        ["press_end", "button_down", "button_up"],
     ),
     "bthome": (
         [
@@ -2239,6 +2318,7 @@ NATIVE_NON_CLICK_EVENT_TYPES = {
     "xiaomi_ble_cube": ["rotate_left", "rotate_right"],
     "homekit_controller_doorbell": ["ring", "double_press", "long_press"],
     "homee_button_state": ["upper", "lower", "released"],
+    "zha_long_press_only": ["long_press_start", "long_press_end"],
 }
 
 
@@ -2251,8 +2331,8 @@ class _NativeButton(EventEntity):
         self._attr_event_types = list(event_types)
         self.entity_id = "event.native_button"
 
-    def press(self, event_type: str) -> None:
-        self._trigger_event(event_type)
+    def press(self, event_type: str, attributes: dict | None = None) -> None:
+        self._trigger_event(event_type, attributes)
         self.async_write_ha_state()
 
 
@@ -2313,10 +2393,12 @@ async def test_native_integration_event_types(
             if c["service_data"].get("entity_id") == ["light.test_light"]
         ]
 
-    async def _press(event_type: str) -> None:
+    async def _press(event_type: str, press_count: int | None = None) -> None:
         # Real events are milliseconds apart, so each is its own state.
         freezer.tick(timedelta(milliseconds=100))
-        button.press(event_type)
+        button.press(
+            event_type, None if press_count is None else {"press_count": press_count}
+        )
         await settle(hass)
 
     for event_type in ignored:
@@ -2330,8 +2412,15 @@ async def test_native_integration_event_types(
     assert last_action.attributes["click"] == "single"
     assert last_action.attributes["event_type"] == single
 
-    if double is not None:
+    if double == "multi_press":
+        # Only a count of 2 is a double click.
+        await _press(double, 3)
         await _press(double)
+        assert _actions() == ["toggle"]
+        await _press(double, 2)
+    elif double is not None:
+        await _press(double)
+    if double is not None:
         assert _actions() == ["toggle", "turn_off"]
         assert _vlight(hass).state == "off"
         last_action = hass.states.get("sensor.native_remote_last_action")
@@ -2343,7 +2432,8 @@ async def test_native_integration_event_types(
 async def test_native_non_click_entity_rejects_a_single_click(
     hass: HomeAssistant, light_entry: MockConfigEntry, integration: str
 ) -> None:
-    """A dial, cube, command or doorbell entity has no single click to bind."""
+    """A dial, cube, command, doorbell or long-press-only entity has no single
+    click to bind."""
     await setup_entries(hass, light_entry)
     button = await _add_native_button(hass, NATIVE_NON_CLICK_EVENT_TYPES[integration])
 
@@ -2385,3 +2475,82 @@ async def test_button_of_an_unloaded_integration_is_judged_by_its_registry(
         assert result["errors"] == {"base": "double_click_unsupported"}
     else:
         assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+# isy994: one entity per paddle, before 2026.12 and from it.
+ISY_EVENT_TYPES = {
+    "2026_10": ["press_end", "multi_press_end", "long_press_start", "long_press_end"],
+    "2026_12": ["single_press", "multi_press", "long_press_start", "long_press_end"],
+}
+
+
+def _add_isy_button(hass: HomeAssistant, event_types: list[str]) -> str:
+    entry = er.async_get(hass).async_get_or_create(
+        "event", "isy994", "node-1", suggested_object_id="isy_button"
+    )
+    _seed(hass, entry.entity_id, event_types)
+    return entry.entity_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("version", list(ISY_EVENT_TYPES))
+@pytest.mark.parametrize("click", ["single", "double"])
+async def test_isy_button_is_rejected(
+    hass: HomeAssistant, light_entry: MockConfigEntry, version: str, click: str
+) -> None:
+    """An ISY button can't be bound, whichever clicks its event types have."""
+    await setup_entries(hass, light_entry)
+    button = _add_isy_button(hass, ISY_EVENT_TYPES[version])
+    key = CONF_ON_BUTTONS_SINGLE if click == "single" else CONF_ON_BUTTONS_DOUBLE
+
+    result = await _create_remote_through_flow(
+        hass, {REMOTE_ACTION_ON: {key: [button]}}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "isy_button_unsupported"}
+
+
+@pytest.mark.asyncio
+async def test_options_reject_an_isy_button(hass: HomeAssistant) -> None:
+    """Configure rejects an ISY button too."""
+    remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]})
+    _seed(hass, "event.pico_on", PICO_TYPES)
+    button = _add_isy_button(hass, ISY_EVENT_TYPES["2026_12"])
+    await setup_entries(hass, remote)
+
+    result = await hass.config_entries.options.async_init(remote.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Test Remote",
+            CONF_TARGET_LIGHTS: ["light.test_light"],
+            CONF_BRIGHTNESS_STEP: 10,
+            **EMPTY_REMOTE_SECTIONS,
+            REMOTE_ACTION_ON: {CONF_ON_BUTTONS_SINGLE: ["event.pico_on", button]},
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "isy_button_unsupported"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("version", list(ISY_EVENT_TYPES))
+async def test_isy_button_never_fires_a_binding(
+    hass: HomeAssistant, light_entry: MockConfigEntry, version: str
+) -> None:
+    """A binding saved for an ISY button fires on neither half of the paddle."""
+    types = ISY_EVENT_TYPES[version]
+    hass.states.async_set("light.living_room", "off")
+    button = _add_isy_button(hass, types)
+    remote = _remote_entry(
+        **{CONF_ON_BUTTONS_SINGLE: [button], CONF_OFF_BUTTONS_DOUBLE: [button]}
+    )
+    await setup_entries(hass, light_entry, remote)
+    calls = _record_service_calls(hass)
+
+    for event_type in types:
+        for direction in ("up", "down"):
+            _fire(hass, button, event_type, types, direction=direction, press_count=2)
+            await settle(hass)
+    assert [c for c in calls if c["domain"] == "light"] == []
+    assert _vlight(hass).state == "off"

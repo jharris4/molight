@@ -41,6 +41,7 @@ EVENT_MATTER = "event.e2e_button_matter"
 EVENT_Z2M = "event.e2e_button_z2m"
 EVENT_CASETA = "event.e2e_button_caseta"
 EVENT_HUE = "event.e2e_button_hue"
+EVENT_STANDARD = "event.e2e_button_standard"
 TURN_ON_SELECT = "select.e2e_turn_on_selection"
 SOURCE_SELECT = "select.e2e_source_mode"
 VIRTUAL_OCCUPANCY = "binary_sensor.e2e_occupancy"
@@ -8865,9 +8866,22 @@ def run_remote_event_types_scenarios(client: HomeAssistantClient) -> None:
             "brightness_step": 20,
             **EMPTY_REMOTE_SECTIONS,
             "turn_on": {
-                "on_buttons_single": [EVENT_MATTER, EVENT_Z2M, EVENT_CASETA, EVENT_HUE]
+                "on_buttons_single": [
+                    EVENT_MATTER,
+                    EVENT_Z2M,
+                    EVENT_CASETA,
+                    EVENT_HUE,
+                    EVENT_STANDARD,
+                ]
             },
-            "turn_off": {"off_buttons_double": [EVENT_MATTER, EVENT_Z2M, EVENT_CASETA]},
+            "turn_off": {
+                "off_buttons_double": [
+                    EVENT_MATTER,
+                    EVENT_Z2M,
+                    EVENT_CASETA,
+                    EVENT_STANDARD,
+                ]
+            },
         },
         "Event types remote",
     )
@@ -8894,6 +8908,20 @@ def run_remote_event_types_scenarios(client: HomeAssistantClient) -> None:
         client.fire_event(button, double)
         wait_event_types_action(client, "turn_off", "double", button, double)
         client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    # Standard button events: multi_press is a double click only at a count of 2.
+    client.fire_event(EVENT_STANDARD, "single_press")
+    wait_event_types_action(client, "turn_on", "single", EVENT_STANDARD, "single_press")
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    client.fire_event(EVENT_STANDARD, "multi_press", {"press_count": 3})
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on: a triple press is not a double click",
+    )
+    client.fire_event(EVENT_STANDARD, "multi_press", {"press_count": 2})
+    wait_event_types_action(client, "turn_off", "double", EVENT_STANDARD, "multi_press")
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
     # Hue-style: initial_press is the single-click fallback.
     client.fire_event(EVENT_HUE, "initial_press")
     wait_event_types_action(client, "turn_on", "single", EVENT_HUE, "initial_press")

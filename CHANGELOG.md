@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Standard button events from Home Assistant 2026.12**: Zigbee remotes on ZHA
+  and other buttons with `single_press`, `press_end` or `multi_press` fire
+  single and double clicks. ISY buttons are rejected for now.
+
 ## [2.0.0] - 2026-11-19
 
 ### Upgrade notes

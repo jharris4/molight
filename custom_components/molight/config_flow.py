@@ -187,6 +187,7 @@ from .remote import (
     CLICK_SINGLE,
     entity_double_click_supported,
     entity_single_click_supported,
+    is_isy_button,
 )
 
 if TYPE_CHECKING:
@@ -1191,6 +1192,8 @@ def _validate_remote(hass: HomeAssistant, cfg: dict[str, Any]) -> dict[str, str]
                 if (entity_id, click) in seen:
                     return {"base": "button_click_conflict"}
                 seen.add((entity_id, click))
+                if is_isy_button(hass, entity_id):
+                    return {"base": "isy_button_unsupported"}
                 if (
                     click == CLICK_SINGLE
                     and entity_single_click_supported(hass, entity_id) is False

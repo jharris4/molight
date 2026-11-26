@@ -61,6 +61,7 @@ EVENT_MATTER: Final = "event_matter"
 EVENT_Z2M: Final = "event_z2m"
 EVENT_CASETA: Final = "event_caseta"
 EVENT_HUE: Final = "event_hue"
+EVENT_STANDARD: Final = "event_standard"
 
 DEFAULT_STATES: Final = {
     LIGHT_MAIN: {
@@ -103,4 +104,5 @@ DEFAULT_STATES: Final = {
     EVENT_Z2M: {"state": None, "available": True, "attributes": {}},
     EVENT_CASETA: {"state": None, "available": True, "attributes": {}},
     EVENT_HUE: {"state": None, "available": True, "attributes": {}},
+    EVENT_STANDARD: {"state": None, "available": True, "attributes": {}},
 }

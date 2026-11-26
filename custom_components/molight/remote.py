@@ -29,9 +29,12 @@ one may fire the binding:
     lutron-caseta-events integration): single = `press` (`release` is
     ignored), double = `multi_tap` where the button has it.
   - Home Assistant's standard button events (ButtonEventType; Lutron Caséta
-    Picos and keypads from 2026.11): single = `press_start`, which also
-    starts a long press. `press_end`, the long-press and the multi-press
-    types never fire a binding, so no double click.
+    Picos and keypads from 2026.11, ZHA remotes from 2026.12): single =
+    `single_press`, else `press_start`, which also starts a long press,
+    else `press_end`. Double = `multi_press` with a `press_count` of 2.
+    The long-press types never fire a binding.
+  - ISY buttons are rejected by the form and never fire a binding: one
+    entity fires the same event for the top and the bottom of a paddle.
   - BTHome, Xiaomi BLE, SwitchBot, Govee BLE, native Lutron raise/lower:
     single = `press`, double = `double_press` where the button has it.
   - Tuya scene switches: `click` / `double_click`; their `press` is a long
@@ -92,8 +95,9 @@ CLICK_DOUBLE = "double"
 
 # Event types for a completed click, in priority order: only a button's first
 # match counts, so a multi-press button's short_release never double-fires
-# alongside its multi_press_1. The last two fire when the button goes down,
-# so a release spelling wins where a button has both.
+# alongside its multi_press_1. initial_press and press_start fire when the
+# button goes down, so a release spelling above them wins where a button has
+# both. press_end is last: a Pico has it with press_start and fires going down.
 _SINGLE_EVENT_TYPES = (
     "multi_press_1",
     "single",
@@ -106,7 +110,13 @@ _SINGLE_EVENT_TYPES = (
     "short_release",
     "initial_press",
     "press_start",
+    "press_end",
 )
+# The standard multi-press event type, a double click only when its
+# press_count attribute (ATTR_PRESS_COUNT from Home Assistant 2026.12) is 2.
+_MULTI_PRESS = "multi_press"
+_ATTR_PRESS_COUNT = "press_count"
+_DOUBLE_PRESS_COUNT = 2
 # multi_tap is how Lutron buttons re-exposed as event entities (the
 # lutron-caseta-events integration) spell a double click.
 _DOUBLE_EVENT_TYPES = (
@@ -118,7 +128,9 @@ _DOUBLE_EVENT_TYPES = (
     "KeyPressed2x",
     "double_click",
     "multi_tap",
+    _MULTI_PRESS,
 )
+_ISY_PLATFORM = "isy994"
 
 
 def single_click_event_type(event_types: list[str]) -> str | None:
@@ -129,6 +141,12 @@ def single_click_event_type(event_types: list[str]) -> str | None:
 def double_click_event_type(event_types: list[str]) -> str | None:
     """Return the event_type meaning a double click, or None if unsupported."""
     return next((t for t in _DOUBLE_EVENT_TYPES if t in event_types), None)
+
+
+def is_isy_button(hass: HomeAssistant, entity_id: str) -> bool:
+    """Return True for an ISY button, which can't say which paddle half was pressed."""
+    entry = er.async_get(hass).async_get(entity_id)
+    return entry is not None and entry.platform == _ISY_PLATFORM
 
 
 def _entity_event_types(hass: HomeAssistant, entity_id: str) -> list[str] | None:
@@ -320,12 +338,15 @@ def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE
         supported = new_state.attributes.get(ATTR_EVENT_TYPES) or []
         if event_type == single_click_event_type(supported):
             click = CLICK_SINGLE
-        elif event_type == double_click_event_type(supported):
+        elif event_type == double_click_event_type(supported) and (
+            event_type != _MULTI_PRESS
+            or new_state.attributes.get(_ATTR_PRESS_COUNT) == _DOUBLE_PRESS_COUNT
+        ):
             click = CLICK_DOUBLE
         else:
             return
         binding = bindings.get((event.data["entity_id"], click))
-        if binding is None:
+        if binding is None or is_isy_button(hass, event.data["entity_id"]):
             return
         action, service, data = binding
         if action == REMOTE_ACTION_TOGGLE and len(targets) > 1:

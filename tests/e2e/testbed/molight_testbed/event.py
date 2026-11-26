@@ -10,7 +10,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import controller_for_entry
-from .const import EVENT_BUTTON, EVENT_CASETA, EVENT_HUE, EVENT_MATTER, EVENT_Z2M
+from .const import (
+    EVENT_BUTTON,
+    EVENT_CASETA,
+    EVENT_HUE,
+    EVENT_MATTER,
+    EVENT_STANDARD,
+    EVENT_Z2M,
+)
 from .entity import TestbedEntity
 
 
@@ -82,6 +89,19 @@ async def async_setup_entry(
                 "event.e2e_button_hue",
                 "E2E Hue Button",
                 event_types=["initial_press"],
+            ),
+            # Standard button events: multi_press carries a press_count.
+            TestbedButtonEvent(
+                controller,
+                EVENT_STANDARD,
+                "event.e2e_button_standard",
+                "E2E Standard Button",
+                event_types=[
+                    "single_press",
+                    "multi_press",
+                    "long_press_start",
+                    "long_press_end",
+                ],
             ),
         ]
     )
