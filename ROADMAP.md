@@ -93,6 +93,9 @@ Worth building if a user asks, not before.
 - **Auto-on brightness and color read from entities.** The option-source pattern of the turn-on
   selection, applied to brightness and color, for lux-aware or custom curves. Adaptive Lighting with
   item 3 covers time-of-day brightness without it.
+- **ISY buttons on a Virtual Remote.** One ISY button entity fires the same event for the top and the
+  bottom of a paddle and tells them apart only by a `direction` attribute, so the form rejects it
+  today. Binding a click per paddle half needs the remote to read that attribute.
 
 ## Already covered
 
